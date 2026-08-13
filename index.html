@@ -1,0 +1,3699 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Center — Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@200;300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root{
+  --radius-sm:6px; --radius-md:10px; --radius-lg:12px;
+  --font-display:'Exo 2','Space Grotesk',system-ui,sans-serif;
+  --font-body:'Inter',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+
+  --ok:#54e6a8;      --ok-soft:rgba(84,230,168,.14);
+  --warn:#ffd166;    --warn-soft:rgba(255,209,102,.14);
+  --crit:#ff5a5a;    --crit-soft:rgba(255,90,90,.14);
+  --info:#3de0ff;    --info-soft:rgba(61,224,255,.14);
+
+  --scope-bg:rgba(4,12,22,.42); --scope-grid:rgba(61,224,255,.06); --scope-edge:rgba(255,255,255,.08);
+  --scope-cpu:#33e0ff; --scope-ram:#b78bff; --scope-temp:#ff9f5a; --scope-lat:#54e6a8; --scope-disk:#ffd166;
+  --hall-bg:url('/assets/scada-server-hall-bg.png');
+  --frame:1px solid rgba(255,255,255,.08);
+  --frame-soft:1px solid rgba(255,255,255,.04);
+  --frame-glow:0 0 0 1px rgba(255,255,255,.06), 0 0 24px rgba(0,210,255,.06), inset 0 0 0 1px rgba(255,255,255,.03);
+}
+html[data-theme="dark"]{
+  --bg:#050a10; --bg-2:#03070c;
+  --panel:rgba(6,14,24,.38); --panel-2:rgba(8,18,30,.32);
+  --border:rgba(255,255,255,.08); --border-soft:rgba(255,255,255,.04);
+  --text:#e8f4ff; --text-dim:#8eb0c8; --text-faint:#5f7f99;
+  --accent:#3de0ff; --accent-2:#54e6a8;
+  --shadow:var(--frame-glow), 0 18px 48px -24px rgba(0,0,0,.65);
+}
+html[data-theme="light"]{
+  --bg:#e8eef4; --bg-2:#dde6ee;
+  --panel:rgba(255,255,255,.88); --panel-2:#f4f7fa;
+  --border:#c5d3e0; --border-soft:#d7e1eb;
+  --text:#151f29; --text-dim:#5c6b7a; --text-faint:#8a97a3;
+  --accent:#0b6d8f; --accent-2:#0f8f5b;
+  --shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 24px -14px rgba(20,30,40,.25);
+  --hall-bg:none;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:var(--font-body);
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  position:relative;
+}
+html[data-theme="dark"] body::before{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(3,8,14,.62) 0%, rgba(3,8,14,.42) 45%, rgba(3,8,14,.72) 100%),
+    radial-gradient(ellipse 70% 45% at 50% 40%, rgba(0,210,255,.1), transparent 60%),
+    var(--hall-bg) center / cover no-repeat;
+}
+.app, .app > *{ position:relative; z-index:1; }
+::selection{ background:var(--accent); color:#04121a; }
+button{ font-family:inherit; cursor:pointer; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-thumb{ background:rgba(61,224,255,.22); border-radius:8px; }
+::-webkit-scrollbar-track{ background:transparent; }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.app{ display:grid; grid-template-columns:250px 1fr; min-height:100vh; }
+
+/* ---- sidebar ---- */
+.sidebar{
+  background:rgba(4,10,18,.45);
+  border-right:1px solid rgba(255,255,255,.06);
+  padding:22px 16px;
+  display:flex; flex-direction:column;
+  position:sticky; top:0; height:100vh; overflow-y:auto;
+  backdrop-filter:blur(16px) saturate(1.15);
+  box-shadow:4px 0 40px rgba(0,0,0,.25), inset -1px 0 0 rgba(255,255,255,.04);
+}
+.brand{ padding:2px 6px 18px; }
+.brand-logo-wrap{
+  display:flex; align-items:center; justify-content:center;
+  margin:0 0 12px; padding:12px 10px;
+  border:var(--frame);
+  border-radius:10px;
+  background:rgba(255,255,255,.03);
+  box-shadow:var(--frame-glow);
+  backdrop-filter:blur(8px);
+}
+.brand-logo{
+  display:block; width:100%; max-width:200px; height:auto;
+  object-fit:contain; margin:0; border-radius:0;
+  background:transparent !important; padding:0;
+  mix-blend-mode:normal;
+  filter:drop-shadow(0 0 12px rgba(61,224,255,.18));
+}
+.brand .co{ font-size:11.5px; letter-spacing:.06em; color:var(--text-dim); font-weight:400; }
+.brand .co span{ color:var(--accent-2); }
+.brand h1{
+  font-family:var(--font-display); font-size:20px; font-weight:300;
+  color:var(--accent); margin-top:4px; letter-spacing:.08em; text-transform:uppercase;
+  text-shadow:0 0 18px rgba(61,224,255,.35);
+}
+.brand p{ font-size:11.5px; color:var(--text-faint); margin-top:2px; font-weight:300; }
+.brand .db-chip{
+  margin-top:10px; display:inline-flex; align-items:center; gap:6px;
+  font-size:10.5px; font-weight:700; padding:5px 9px; border-radius:99px;
+  border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim);
+}
+.brand .db-chip .dot{ width:6px; height:6px; border-radius:50%; background:var(--text-faint); }
+.brand .db-chip.ok{ color:var(--ok); border-color:color-mix(in srgb, var(--ok) 35%, transparent); background:var(--ok-soft); }
+.brand .db-chip.ok .dot{ background:var(--ok); }
+.brand .db-chip.bad{ color:var(--crit); border-color:color-mix(in srgb, var(--crit) 35%, transparent); background:var(--crit-soft); }
+.brand .db-chip.bad .dot{ background:var(--crit); }
+
+.navgroup{ margin-top:14px; }
+.navgroup .label{ font-size:10.5px; letter-spacing:.09em; color:var(--text-faint); font-weight:700; padding:6px 10px 8px; text-transform:uppercase; }
+.navitem{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 10px; border-radius:var(--radius-sm);
+  font-size:13.5px; font-weight:500; color:var(--text-dim);
+  border:1px solid transparent; background:none; width:100%; text-align:left;
+  transition:background .12s ease, color .12s ease;
+}
+.navitem:hover{ background:var(--panel-2); color:var(--text); }
+.navitem.active{ background:var(--info-soft); color:var(--accent); border-color:color-mix(in srgb, var(--accent) 30%, transparent); font-weight:600; }
+.navitem .ic{ width:16px; text-align:center; opacity:.9; font-size:14px; }
+.navitem .dot{ margin-left:auto; width:7px; height:7px; border-radius:50%; }
+.navitem .badge{ margin-left:auto; font-family:var(--font-mono); font-size:10.5px; font-weight:700; background:var(--crit); color:#fff; border-radius:20px; padding:1px 7px; }
+.navitem .badge.zero{ background:var(--panel-2); color:var(--text-faint); }
+
+.sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid var(--border-soft); }
+.theme-row{ display:flex; align-items:center; justify-content:space-between; padding:6px 10px; }
+.theme-row .lbl{ font-size:12.5px; color:var(--text-dim); font-weight:600; }
+.themeswitch{
+  position:relative; width:46px; height:25px; border-radius:99px;
+  background:var(--panel-2); border:1px solid var(--border); padding:0;
+}
+.themeswitch .knob{
+  position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%;
+  background:linear-gradient(160deg,#ffd27a,#ff9f43);
+  transition:transform .18s ease, background .18s ease;
+  display:flex; align-items:center; justify-content:center; font-size:11px;
+}
+html[data-theme="dark"] .themeswitch .knob{ transform:translateX(21px); background:linear-gradient(160deg,#4dd7ff,#2a7bd0); }
+
+/* ---- main ---- */
+.main{ padding:22px 26px 60px; min-width:0; background:transparent; }
+.topbar{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  margin-bottom:20px; flex-wrap:wrap;
+}
+.topbar h2{
+  font-family:var(--font-display); font-size:22px; font-weight:300;
+  letter-spacing:.14em; text-transform:uppercase; color:#9ad8ff;
+  text-shadow:0 0 20px rgba(61,224,255,.35);
+}
+.topbar .sub{ font-size:12.5px; color:var(--text-dim); margin-top:3px; font-weight:300; }
+.topbar-right{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11.5px; font-weight:400; padding:7px 12px; border-radius:99px;
+  border:var(--frame); background:rgba(6,14,24,.35); color:var(--text-dim);
+  backdrop-filter:blur(10px); box-shadow:var(--frame-glow);
+}
+.pill .dot{ width:7px; height:7px; border-radius:50%; }
+.pill.live{ color:var(--ok); border-color:color-mix(in srgb, var(--ok) 35%, transparent); background:var(--ok-soft); }
+.pill.live .dot{ background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); animation:pulse 1.6s infinite; }
+.pill.down{ color:var(--crit); border-color:color-mix(in srgb, var(--crit) 35%, transparent); background:var(--crit-soft); }
+.pill.down .dot{ background:var(--crit); }
+.pill.clock{ font-family:var(--font-mono); }
+
+@keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(31,174,107,.5);} 70%{box-shadow:0 0 0 7px rgba(31,174,107,0);} 100%{box-shadow:0 0 0 0 rgba(31,174,107,0);} }
+
+.btn{
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:12.5px; font-weight:500; padding:9px 14px; border-radius:var(--radius-sm);
+  border:var(--frame); background:rgba(6,14,24,.35); color:var(--text);
+  transition:filter .12s ease, transform .05s ease, border-color .12s ease;
+  backdrop-filter:blur(8px); box-shadow:var(--frame-glow);
+}
+.btn:hover{ filter:brightness(1.08); }
+.btn:active{ transform:translateY(1px); }
+.btn.primary{ background:var(--accent); border-color:var(--accent); color:#04121a; }
+.btn.ok{ background:var(--ok); border-color:var(--ok); color:#04120c; }
+.btn.warn{ background:var(--warn); border-color:var(--warn); color:#241300; }
+.btn.ghost{ background:transparent; }
+.btn.sm{ padding:6px 10px; font-size:11.5px; }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+.banner{
+  display:flex; align-items:center; gap:10px;
+  background:var(--crit-soft); border:1px solid color-mix(in srgb, var(--crit) 35%, transparent);
+  color:var(--crit); font-size:12.5px; font-weight:600; padding:10px 14px; border-radius:var(--radius-md);
+  margin-bottom:16px; display:none;
+}
+.banner.show{ display:flex; }
+
+/* ---- views ---- */
+.view{ display:none; }
+.view.active{ display:block; animation:fadeIn .18s ease; }
+@keyframes fadeIn{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;} }
+
+/* ---- generic panels/cards ---- */
+.panel{
+  background:var(--panel); border:var(--frame); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow); padding:18px 20px;
+  backdrop-filter:blur(14px) saturate(1.2);
+}
+.panel + .panel{ margin-top:16px; }
+.panel h3{
+  font-family:var(--font-display); font-size:12px; font-weight:400;
+  display:flex; align-items:center; gap:8px; margin-bottom:14px;
+  letter-spacing:.1em; text-transform:uppercase; color:#b8d8ef;
+}
+.panel h3 .ic{ font-size:15px; }
+.panel h3 .hint{ margin-left:auto; font-family:var(--font-body); font-size:11px; font-weight:600; color:var(--text-faint); }
+
+.grid{ display:grid; gap:14px; }
+.g-7{ grid-template-columns:repeat(7,1fr); }
+.g-5{ grid-template-columns:repeat(5,1fr); }
+.g-4{ grid-template-columns:repeat(4,1fr); }
+.g-3{ grid-template-columns:repeat(3,1fr); }
+.g-2{ grid-template-columns:repeat(2,1fr); }
+@media (max-width:1200px){ .g-7{grid-template-columns:repeat(4,1fr);} .g-5,.g-4{grid-template-columns:repeat(3,1fr);} }
+@media (max-width:760px){ .g-7,.g-5,.g-4,.g-3,.g-2{grid-template-columns:repeat(2,1fr);} .app{grid-template-columns:1fr;} .sidebar{position:relative; height:auto;} }
+
+.stat{
+  background:var(--panel); border:var(--frame); border-radius:var(--radius-md);
+  box-shadow:var(--shadow); padding:14px 16px; backdrop-filter:blur(12px);
+}
+.stat .lbl{ font-size:10.5px; letter-spacing:.07em; color:var(--text-faint); font-weight:700; text-transform:uppercase; }
+.stat .val{ font-family:var(--font-mono); font-size:26px; font-weight:700; margin-top:6px; }
+.stat .val .unit{ font-size:13px; color:var(--text-dim); font-weight:600; margin-left:2px; }
+.stat.ok .val{ color:var(--ok); } .stat.warn .val{ color:var(--warn); } .stat.crit .val{ color:var(--crit); } .stat.info .val{ color:var(--accent); }
+
+.metric-bar-row{ margin-bottom:14px; }
+.metric-bar-row:last-child{ margin-bottom:0; }
+.metric-bar-row .top{ display:flex; justify-content:space-between; font-size:12.5px; font-weight:600; margin-bottom:6px; }
+.metric-bar-row .top .name{ display:flex; align-items:center; gap:6px; color:var(--text-dim); }
+.metric-bar-row .top .num{ font-family:var(--font-mono); }
+.bar-track{ height:8px; border-radius:99px; background:var(--panel-2); border:1px solid var(--border-soft); overflow:hidden; }
+.bar-fill{ height:100%; border-radius:99px; transition:width .4s ease; }
+
+.actions-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media (max-width:900px){ .actions-grid{ grid-template-columns:repeat(2,1fr); } }
+.action-btn{
+  border-radius:var(--radius-md); border:1px solid var(--border); padding:14px; text-align:left;
+  font-size:13px; font-weight:700; color:#fff; display:flex; flex-direction:column; gap:8px;
+}
+.action-btn .ic{ font-size:17px; }
+.action-btn.a1{ background:linear-gradient(135deg,#1c7fd6,#1364ac); }
+.action-btn.a2{ background:linear-gradient(135deg,#1fae6b,#128251); }
+.action-btn.a3{ background:linear-gradient(135deg,#e08a1e,#c96a0c); }
+.action-btn.a4{ background:var(--panel); color:var(--text); }
+
+.status-card{ display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:var(--radius-md); border:var(--frame); background:var(--panel); box-shadow:var(--frame-glow); backdrop-filter:blur(12px); }
+.status-card .ic{ font-size:19px; width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; background:var(--panel-2); flex:none; }
+.status-card b{ display:block; font-size:13px; }
+.status-card .state{ font-size:14px; font-weight:700; margin:2px 0; }
+.status-card .state.ok{ color:var(--ok); } .status-card .state.warn{ color:var(--warn); } .status-card .state.crit{ color:var(--crit); }
+.status-card p{ font-size:11.5px; color:var(--text-faint); line-height:1.4; }
+
+/* ---- server cards on overview ---- */
+.server-card{ background:var(--panel); border:var(--frame); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:16px 18px; backdrop-filter:blur(12px); }
+.server-card .head{ display:flex; align-items:center; gap:9px; margin-bottom:12px; }
+.server-card .head .sdot{ width:9px; height:9px; border-radius:50%; }
+.server-card .head h4{ font-family:var(--font-display); font-size:15px; font-weight:700; flex:1; }
+.server-card .stpill{ font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; letter-spacing:.03em; }
+.server-card .stpill.up{ background:var(--ok-soft); color:var(--ok); }
+.server-card .stpill.down{ background:var(--crit-soft); color:var(--crit); }
+.mini-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+.mini{ background:var(--panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:8px 9px; }
+.mini .l{ font-size:9.5px; color:var(--text-faint); font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.mini .v{ font-family:var(--font-mono); font-size:15px; font-weight:700; margin-top:2px; }
+.chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.chip{ font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:6px; border:1px solid var(--border); color:var(--text-faint); }
+.chip.on{ color:var(--crit); border-color:color-mix(in srgb, var(--crit) 40%, transparent); background:var(--crit-soft); }
+.rowbtns{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:7px; }
+.rowbtns .btn{ justify-content:center; padding:8px 4px; font-size:11px; }
+
+/* ---- scope charts (PLC line + workbench bars) ---- */
+.scope-wrap{
+  background:linear-gradient(165deg, rgba(6,16,28,.42), rgba(4,10,18,.28));
+  border:var(--frame); border-radius:var(--radius-md);
+  padding:12px 14px 10px; position:relative; overflow:hidden;
+  box-shadow:var(--frame-glow);
+  backdrop-filter:blur(12px);
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.scope-wrap:hover{
+  border-color:rgba(255,255,255,.16);
+  box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 0 28px rgba(0,210,255,.12), inset 0 0 0 1px rgba(255,255,255,.05);
+  transform:translateY(-1px);
+}
+.scope-wrap.chart-line, .scope-wrap.chart-bar{
+  background:linear-gradient(165deg, rgba(6,16,28,.45), rgba(4,10,18,.3));
+  border:var(--frame);
+}
+.scope-wrap.chart-line .scope-head .name,
+.scope-wrap.chart-bar .scope-head .name{ color:#cfe9f5; font-weight:400; letter-spacing:.06em; }
+.scope-wrap.chart-line .scope-head .now,
+.scope-wrap.chart-bar .scope-head .now{
+  color:#3de0ff; font-weight:300; text-shadow:0 0 12px rgba(61,224,255,.45);
+}
+.scope-wrap.chart-line .scope-head .live,
+.scope-wrap.chart-bar .scope-head .live{ color:#4dd7ff; }
+.scope-wrap.chart-line .scope-head .live .d,
+.scope-wrap.chart-bar .scope-head .live .d{ background:#4dd7ff; }
+.scope-wrap.chart-line .scope-axis,
+.scope-wrap.chart-bar .scope-axis{ color:#6f91aa; padding-left:10px; padding-right:52px; }
+.scope-wrap.chart-line .scope-axis span:last-child,
+.scope-wrap.chart-bar .scope-axis span:last-child{ color:#3de0ff; }
+.scope-wrap.chart-bar .scope-axis{ padding-right:10px; }
+.scope-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.scope-head .name{ font-size:11px; font-weight:400; color:#cfe9f5; letter-spacing:.06em; text-transform:uppercase; }
+.scope-head .swatch{ width:8px; height:8px; border-radius:2px; box-shadow:0 0 8px currentColor; }
+.scope-head .live{ margin-left:auto; font-family:var(--font-mono); font-size:9.5px; color:#4dd7ff; letter-spacing:.06em; display:flex; align-items:center; gap:5px; font-weight:300; }
+.scope-head .live .d{ width:6px; height:6px; border-radius:50%; background:#4dd7ff; animation:pulse 1.6s infinite; }
+.scope-head .now{ font-family:var(--font-mono); font-size:16px; font-weight:300; color:#fff; }
+.scope-canvas-wrap{ position:relative; border-radius:6px; overflow:hidden; border:1px solid rgba(255,255,255,.05); }
+canvas.scope{ width:100%; display:block; cursor:crosshair; background:transparent; border-radius:0; }
+.scope-axis{
+  display:grid; grid-template-columns:repeat(5,1fr); gap:2px;
+  font-family:var(--font-mono); font-size:9px; color:#6f91aa; padding:4px 2px 0 10px; font-weight:300;
+}
+.scope-axis span{ text-align:center; }
+.scope-axis span:first-child{ text-align:left; }
+.scope-axis span:last-child{ text-align:right; color:#3de0ff; font-weight:400; }
+.scope-tip{
+  display:none; position:absolute; z-index:3; pointer-events:none;
+  left:12px; top:36px; max-width:92%;
+  background:rgba(4,12,22,.94); border:1px solid rgba(61,224,255,.35); border-radius:6px;
+  padding:7px 10px; font-family:var(--font-mono); font-size:10.5px; color:#d7eef8; font-weight:300;
+  box-shadow:0 0 20px rgba(61,224,255,.2); backdrop-filter:blur(8px);
+}
+.scope-tip.show{ display:block; }
+.scope-tip b{ color:#fff; font-weight:500; }
+
+/* ---- report builder ---- */
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:11px; font-weight:700; color:var(--text-faint); letter-spacing:.04em; text-transform:uppercase; margin-bottom:6px; }
+select, input[type="date"]{
+  width:100%; padding:10px 11px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); font-size:13px; font-family:var(--font-body); font-weight:600;
+}
+.check-grid{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.checkopt{ display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--panel-2); font-size:12.5px; font-weight:600; }
+.checkopt input{ width:15px; height:15px; accent-color:var(--accent); }
+.note{ font-size:11.5px; color:var(--text-faint); background:var(--panel-2); border:1px solid var(--border-soft); border-radius:var(--radius-sm); padding:10px 12px; margin-top:14px; }
+
+.preview-empty{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 20px; color:var(--text-faint); }
+.preview-empty .ic{ font-size:34px; margin-bottom:10px; opacity:.6; }
+.preview-empty b{ color:var(--text-dim); font-size:14px; display:block; margin-bottom:4px; }
+.preview-empty span{ font-size:12px; max-width:280px; }
+
+table.dt{ width:100%; border-collapse:collapse; font-size:12px; }
+table.dt th{ text-align:left; font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint); font-weight:700; padding:8px 9px; border-bottom:1px solid var(--border); }
+table.dt td{ padding:9px; border-bottom:1px solid var(--border-soft); font-family:var(--font-mono); }
+table.dt tr:last-child td{ border-bottom:none; }
+
+.rec-item{ border:1px solid var(--border); border-left:3px solid var(--info); border-radius:8px; padding:11px 13px; margin-bottom:9px; background:var(--panel-2); }
+.rec-item.critical{ border-left-color:var(--crit); }
+.rec-item.high{ border-left-color:var(--warn); }
+.rec-item.medium{ border-left-color:var(--info); }
+.rec-item.low{ border-left-color:var(--ok); }
+.rec-item .top{ display:flex; align-items:center; gap:8px; margin-bottom:5px; flex-wrap:wrap; }
+.rec-item .pr{ font-size:9.5px; font-weight:800; text-transform:uppercase; padding:2px 7px; border-radius:5px; letter-spacing:.04em; }
+.rec-item.critical .pr{ background:var(--crit-soft); color:var(--crit); }
+.rec-item.high .pr{ background:var(--warn-soft); color:var(--warn); }
+.rec-item.medium .pr{ background:var(--info-soft); color:var(--info); }
+.rec-item.low .pr{ background:var(--ok-soft); color:var(--ok); }
+.rec-item .prob{ font-size:13px; font-weight:700; }
+.rec-item .ev{ font-size:11.5px; color:var(--text-dim); margin-bottom:4px; }
+.rec-item .act{ font-size:12px; color:var(--text); }
+.rec-item .meta{ margin-top:6px; font-size:10.5px; color:var(--text-faint); font-family:var(--font-mono); }
+
+.evt-row{ display:grid; grid-template-columns:150px 70px 1fr 100px; gap:10px; padding:10px 4px; border-bottom:1px solid var(--border-soft); align-items:center; font-size:12px; }
+.evt-row.head{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); font-weight:700; }
+.evt-row .t{ font-family:var(--font-mono); color:var(--text-dim); }
+.sev{ font-size:10px; font-weight:800; padding:2px 8px; border-radius:5px; display:inline-block; width:fit-content; }
+.sev.critical, .sev.high, .sev.alarm, .sev.active{ background:var(--crit-soft); color:var(--crit); }
+.sev.warning{ background:var(--warn-soft); color:var(--warn); }
+.sev.cleared, .sev.normal, .sev.resolved, .sev.recovery{ background:var(--ok-soft); color:var(--ok); }
+.sev.info{ background:var(--info-soft); color:var(--info); }
+
+.source-row{ font-size:11.5px; color:var(--text-dim); padding:8px 0; border-bottom:1px solid var(--border-soft); }
+.source-row:last-child{ border-bottom:none; }
+.source-row b{ color:var(--text); }
+
+.loading-inline{ font-size:12px; color:var(--text-faint); padding:20px; text-align:center; }
+
+/* ---- Top Level Management — SCADA / mission-control skin ---- */
+#view-summary{
+  --tlm-orange:#ff8a3d;
+  --tlm-cyan:#3de0ff;
+  --tlm-magenta:#ff4d9a;
+  --tlm-lime:#54e6a8;
+  --tlm-amber:#ffd166;
+  --tlm-red:#ff5a5a;
+  --tlm-glass:rgba(6,14,24,.36);
+  --tlm-glass-2:rgba(8,18,30,.28);
+  --tlm-line:rgba(255,255,255,.08);
+  --tlm-line-soft:rgba(255,255,255,.04);
+  --panel:rgba(8,16,28,.36);
+  --panel-2:rgba(10,22,36,.28);
+  --border:rgba(255,255,255,.08);
+  --border-soft:rgba(255,255,255,.04);
+  --text:#e8f4ff;
+  --text-dim:#8eb0c8;
+  --text-faint:#5f7f99;
+  position:relative;
+  isolation:isolate;
+  padding-bottom:10px;
+}
+#view-summary::before{ display:none; }
+body.tlm-scada .main{ background:transparent; }
+body.tlm-scada .topbar h2{ /* inherits global thin neon title */ }
+body.tlm-scada .topbar .sub{ font-weight:300; letter-spacing:.04em; color:#6f91aa; }
+body.tlm-scada .topbar .pill{
+  font-weight:400;
+  background:rgba(6,14,24,.35);
+  border:var(--frame);
+  backdrop-filter:blur(10px);
+}
+
+.tlm-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+.tlm-kpi{
+  background:var(--tlm-glass);
+  border:var(--frame);
+  border-radius:12px;
+  box-shadow:var(--frame-glow);
+  padding:18px 20px; position:relative; overflow:hidden;
+  min-height:118px;
+  backdrop-filter:blur(14px) saturate(1.2);
+}
+.tlm-kpi::after{
+  content:"";
+  position:absolute; inset:auto -20% -40% auto; width:120px; height:120px;
+  background:radial-gradient(circle, rgba(255,138,61,.18), transparent 70%);
+  pointer-events:none;
+}
+.tlm-kpi .lbl{
+  font-family:'Exo 2',sans-serif;
+  font-size:10px; font-weight:400; letter-spacing:.16em; text-transform:uppercase;
+  color:rgba(158,196,220,.75);
+}
+.tlm-kpi .val{
+  font-family:'Exo 2',var(--font-mono),sans-serif;
+  font-size:34px; font-weight:200; margin-top:10px;
+  color:var(--tlm-orange); line-height:1.05;
+  text-shadow:0 0 18px rgba(255,138,61,.55), 0 0 40px rgba(255,138,61,.2);
+}
+.tlm-kpi .delta{ font-size:12px; margin-top:8px; font-weight:300; letter-spacing:.02em; }
+.tlm-kpi .delta.up{ color:var(--tlm-lime); } .tlm-kpi .delta.down{ color:var(--tlm-red); } .tlm-kpi .delta.flat{ color:var(--text-dim); }
+#sum-risk-card .val{ color:var(--tlm-cyan); text-shadow:0 0 18px rgba(61,224,255,.5); }
+#sum-risk-card.tlm-risk-crit{ box-shadow:0 0 0 1px rgba(255,90,90,.55), 0 0 28px rgba(255,90,90,.25); }
+#sum-risk-card.tlm-risk-warn{ box-shadow:0 0 0 1px rgba(255,209,102,.45), 0 0 24px rgba(255,209,102,.18); }
+
+.tlm-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:16px; }
+.tlm-grid-2{ display:grid; grid-template-columns:1.55fr 1fr; gap:14px; margin-bottom:16px; align-items:stretch; }
+.tlm-card{
+  background:var(--tlm-glass);
+  border:var(--frame);
+  border-radius:12px;
+  box-shadow:var(--frame-glow);
+  padding:16px 18px 14px;
+  display:flex; flex-direction:column; min-height:360px;
+  backdrop-filter:blur(14px) saturate(1.15);
+  position:relative; overflow:hidden;
+}
+.tlm-card.tlm-hero-bg::before{
+  content:"";
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(6,14,24,.55), rgba(6,14,24,.88)),
+    url('/assets/scada-server-hall-bg.png') center / cover no-repeat;
+  opacity:.55;
+}
+.tlm-card.tlm-hero-bg > *{ position:relative; z-index:1; }
+.tlm-card.tlm-rank-card{ min-height:360px; }
+.tlm-card h4{
+  font-family:'Exo 2',sans-serif;
+  font-size:13px; font-weight:400; margin:0 0 2px;
+  letter-spacing:.12em; text-transform:uppercase; color:#b8d8ef;
+}
+.tlm-card .sub{ font-size:11.5px; font-weight:300; color:var(--text-faint); margin-bottom:10px; line-height:1.4; }
+.tlm-canvas-wrap{
+  position:relative; width:100%; flex:1 1 auto;
+  min-height:240px; height:240px;
+  display:flex; align-items:stretch;
+}
+.tlm-canvas-wrap.tall{ min-height:280px; height:280px; }
+.tlm-canvas-wrap canvas{ width:100% !important; height:100% !important; display:block; }
+.tlm-legend{
+  display:grid; grid-template-columns:1fr 1fr; gap:8px 12px;
+  margin-top:12px; font-size:13.5px; font-weight:500; color:var(--text-dim);
+  padding-top:10px; border-top:1px solid var(--tlm-line-soft);
+}
+.tlm-legend span{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  background:rgba(8,20,34,.35); border:var(--frame-soft);
+  border-radius:6px; padding:8px 10px;
+}
+.tlm-legend i{ width:10px; height:10px; border-radius:2px; display:inline-block; flex:0 0 auto; box-shadow:0 0 8px currentColor; }
+.tlm-legend b{ color:var(--tlm-cyan); font-family:var(--font-mono); font-weight:700; font-size:16px; }
+
+.tlm-risk-click{ cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .12s ease; }
+.tlm-risk-click:hover{
+  border-color:rgba(255,90,90,.35);
+  box-shadow:0 0 0 1px rgba(255,90,90,.25), 0 0 22px rgba(255,90,90,.15);
+  transform:translateY(-1px);
+}
+#tlm-strip-risk-seg{ cursor:pointer; }
+#tlm-strip-risk-seg:hover .glow{ color:#ff8a8a; }
+.tlm-rank{ list-style:none; margin:0; padding:0; flex:1; display:flex; flex-direction:column; justify-content:space-between; }
+.tlm-rank li{
+  display:grid; grid-template-columns:40px 1fr auto; gap:12px; align-items:center;
+  padding:14px 10px; border-bottom:1px solid var(--tlm-line-soft); flex:1;
+}
+.tlm-rank li:last-child{ border-bottom:none; }
+.tlm-rank .rk{
+  width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:400; font-size:12px; letter-spacing:.04em;
+  background:rgba(8,20,34,.45); color:var(--tlm-cyan);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 0 12px rgba(61,224,255,.12);
+}
+.tlm-rank li:nth-child(1) .rk{ color:var(--tlm-orange); border-color:rgba(255,138,61,.45); box-shadow:0 0 14px rgba(255,138,61,.3); }
+.tlm-rank li:nth-child(2) .rk{ color:var(--tlm-cyan); }
+.tlm-rank li:nth-child(3) .rk{ color:var(--tlm-lime); border-color:rgba(84,230,168,.4); box-shadow:0 0 12px rgba(84,230,168,.2); }
+.tlm-rank .name{ font-weight:400; font-size:14px; letter-spacing:.04em; color:#d7ebf8; }
+.tlm-rank .meta{ font-size:11.5px; font-weight:300; color:var(--text-faint); margin-top:3px; line-height:1.35; }
+.tlm-rank .score{
+  font-family:var(--font-mono); font-size:22px; font-weight:300; text-align:right;
+  color:var(--tlm-orange); text-shadow:0 0 14px rgba(255,138,61,.4);
+}
+.tlm-rank .score small{ display:block; font-size:9px; color:var(--text-faint); font-weight:300; margin-top:2px; letter-spacing:.08em; text-transform:uppercase; }
+.tlm-bar-track{ height:4px; background:rgba(61,224,255,.12); border-radius:99px; margin-top:9px; overflow:hidden; }
+.tlm-bar-fill{
+  height:100%; border-radius:99px;
+  background:linear-gradient(90deg,#1a6f8f,var(--tlm-cyan));
+  box-shadow:0 0 10px rgba(61,224,255,.55);
+}
+
+/* Risk heatmap */
+.tlm-heat-wrap{ overflow:auto; flex:1; display:flex; flex-direction:column; }
+.tlm-heat{ width:100%; border-collapse:separate; border-spacing:6px; flex:1; }
+.tlm-heat th{
+  font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-faint);
+  font-weight:400; padding:4px 6px; text-align:center;
+}
+.tlm-heat th.rowlbl{ text-align:left; width:88px; }
+.tlm-heat td{
+  text-align:center; border-radius:8px; padding:14px 8px; min-width:72px;
+  font-family:var(--font-mono); font-size:14px; font-weight:400; color:#fff;
+  vertical-align:middle;
+  box-shadow:inset 0 0 20px rgba(0,0,0,.25);
+}
+.tlm-heat td .u{ display:block; font-size:9px; font-weight:300; opacity:.85; margin-top:2px; letter-spacing:.06em; }
+.tlm-heat td.ok{ background:rgba(84,230,168,.35); color:#b8ffe0; box-shadow:0 0 16px rgba(84,230,168,.25), inset 0 0 12px rgba(84,230,168,.15); }
+.tlm-heat td.warn{ background:rgba(255,209,102,.4); color:#fff4d0; box-shadow:0 0 16px rgba(255,209,102,.22); }
+.tlm-heat td.crit{ background:rgba(255,90,90,.45); color:#ffd0d0; box-shadow:0 0 18px rgba(255,90,90,.3); }
+.tlm-heat .srv{
+  font-family:'Exo 2',sans-serif; font-size:12px; font-weight:400;
+  letter-spacing:.08em; color:#c5e2f5; text-align:left; padding-left:4px;
+}
+.tlm-heat-legend{ display:flex; gap:14px; margin-top:8px; font-size:11px; font-weight:300; color:var(--text-dim); flex-wrap:wrap; }
+.tlm-heat-legend span{ display:inline-flex; align-items:center; gap:6px; }
+.tlm-heat-legend i{ width:10px; height:10px; border-radius:2px; display:inline-block; box-shadow:0 0 8px currentColor; }
+
+/* Capacity headroom gauges */
+.tlm-gauge-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; flex:1; align-content:stretch; }
+.tlm-gauge-grid .tlm-gauge:first-child{ grid-column:1 / -1; }
+.tlm-gauge{
+  background:rgba(6,16,28,.32); border:var(--frame-soft);
+  border-radius:10px; padding:14px 12px 12px; text-align:center;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:140px;
+}
+.tlm-gauge .g-title{ font-size:10px; font-weight:400; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px; }
+.tlm-gauge .g-val{
+  font-family:var(--font-mono); font-size:22px; font-weight:300; margin-top:4px;
+  text-shadow:0 0 12px currentColor;
+}
+.tlm-gauge .g-sub{ font-size:11px; font-weight:300; color:var(--text-faint); margin-top:2px; }
+.tlm-gauge canvas{ width:110px; height:70px; display:block; }
+
+.tlm-alarm-toggle{ display:flex; gap:6px; margin-bottom:8px; }
+.tlm-alarm-toggle .fchip{
+  cursor:pointer; font-weight:300; letter-spacing:.06em;
+  background:rgba(6,14,24,.35); border:var(--frame);
+  color:var(--text-dim);
+}
+.tlm-alarm-toggle .fchip.active{
+  color:var(--tlm-cyan); border-color:rgba(255,255,255,.18);
+  box-shadow:0 0 14px rgba(61,224,255,.15); background:rgba(61,224,255,.08);
+}
+
+#view-summary .panel{
+  background:var(--tlm-glass);
+  border:var(--frame);
+  backdrop-filter:blur(14px);
+  box-shadow:var(--frame-glow);
+}
+#view-summary .panel h3{
+  font-family:'Exo 2',sans-serif; font-weight:400; letter-spacing:.1em; text-transform:uppercase; font-size:12px;
+}
+#view-summary .kpi-card{
+  background:rgba(6,14,24,.32); border:var(--frame);
+  box-shadow:var(--frame-glow);
+}
+#view-summary .kpi-card .head h4{ font-weight:400; letter-spacing:.06em; }
+#view-summary .kpi-rows .r{ font-size:13px; }
+#view-summary .kpi-rows .r b{ font-size:15px; font-weight:700; }
+#view-summary .kpi-card .viewbtn{
+  font-weight:400; letter-spacing:.06em; color:var(--tlm-cyan);
+  border-color:rgba(255,255,255,.12); background:rgba(61,224,255,.06);
+}
+
+.tlm-strip{
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-top:14px; padding:10px 16px;
+  background:rgba(4,10,18,.4); border:var(--frame);
+  border-radius:8px; backdrop-filter:blur(12px);
+  font-family:var(--font-mono); font-size:11px; font-weight:300; color:#7ea3bc;
+  letter-spacing:.04em;
+  box-shadow:var(--frame-glow);
+}
+.tlm-strip .seg{ display:inline-flex; align-items:center; gap:8px; }
+.tlm-strip .glow{ color:var(--tlm-cyan); text-shadow:0 0 10px rgba(61,224,255,.45); }
+.tlm-strip .glow-o{ color:var(--tlm-orange); text-shadow:0 0 10px rgba(255,138,61,.45); }
+.tlm-strip .dot{
+  width:6px; height:6px; border-radius:50%; background:var(--tlm-lime);
+  box-shadow:0 0 8px rgba(84,230,168,.7);
+}
+
+@media (max-width:1100px){
+  .tlm-kpis,.tlm-grid,.tlm-grid-2{ grid-template-columns:1fr 1fr; }
+  .tlm-gauge-grid{ grid-template-columns:1fr 1fr; }
+}
+@media (max-width:700px){
+  .tlm-kpis,.tlm-grid,.tlm-grid-2{ grid-template-columns:1fr; }
+  .tlm-legend{ grid-template-columns:1fr; }
+  .tlm-gauge-grid{ grid-template-columns:1fr; }
+}
+
+.spark-wrap{ margin:2px 0 10px; }
+.spark-wrap .lbl{ font-size:9.5px; color:var(--text-faint); font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px; display:flex; justify-content:space-between; }
+canvas.spark{ width:100%; height:28px; display:block; }
+.kpi-intro{ text-align:center; padding:8px 0 24px; }
+.kpi-intro-ic{ font-size:30px; margin-bottom:8px; }
+.kpi-intro h3{ font-family:var(--font-display); font-size:19px; }
+.kpi-intro p{ font-size:12.5px; color:var(--text-faint); margin-top:4px; }
+.kpi-card{ background:var(--panel); border:var(--frame); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:16px 17px; display:flex; flex-direction:column; backdrop-filter:blur(12px); }
+.kpi-card .head{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.kpi-card .head .sdot{ width:9px; height:9px; border-radius:50%; }
+.kpi-card .head h4{ font-family:var(--font-display); font-size:15px; font-weight:700; }
+.kpi-rows{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-bottom:14px; }
+.kpi-rows .r{ font-size:12.5px; color:var(--text-dim); display:flex; justify-content:space-between; gap:6px; }
+.kpi-rows .r b{ font-family:var(--font-mono); color:var(--text); font-weight:700; }
+.kpi-card .viewbtn{ margin-top:auto; text-align:center; padding:9px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--panel-2); font-size:12px; font-weight:700; color:var(--accent); }
+.kpi-card .viewbtn:hover{ background:var(--info-soft); }
+
+/* ---- AI analytics per-server cards ---- */
+.ai-kpi-card{ background:var(--panel); border:var(--frame); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:15px 16px; backdrop-filter:blur(12px); }
+.ai-kpi-card .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.ai-kpi-card .top h4{ font-family:var(--font-display); font-size:14px; font-weight:700; }
+.ai-kpi-card .score{ font-family:var(--font-mono); font-size:22px; font-weight:700; }
+.ai-kpi-card .sub{ font-size:10.5px; color:var(--text-faint); margin-bottom:10px; }
+.ai-kpi-card .statechips{ display:flex; flex-wrap:wrap; gap:5px; }
+.statechip{ font-size:10px; font-weight:700; padding:3px 7px; border-radius:5px; text-transform:uppercase; letter-spacing:.02em; }
+.statechip.ok{ background:var(--ok-soft); color:var(--ok); }
+.statechip.warn{ background:var(--warn-soft); color:var(--warn); }
+.statechip.crit{ background:var(--crit-soft); color:var(--crit); }
+
+/* ---- server-detail alarm status cards ---- */
+.alarm-status-card{ border:1px solid var(--border); border-radius:var(--radius-md); background:var(--panel); padding:14px 15px; }
+.alarm-status-card .name{ font-size:10.5px; font-weight:800; letter-spacing:.05em; color:var(--text-faint); text-transform:uppercase; }
+.alarm-status-card .cond{ font-family:var(--font-mono); font-size:12px; color:var(--text-dim); margin:6px 0 10px; }
+.alarm-status-card .state{ font-size:14px; font-weight:800; }
+.alarm-status-card .state.ok{ color:var(--ok); } .alarm-status-card .state.crit{ color:var(--crit); }
+
+/* ---- server controls ---- */
+.controls-row{ display:flex; flex-wrap:wrap; gap:10px; }
+.controls-row .btn{ flex:1; min-width:140px; justify-content:center; }
+.crit-btn{ background:var(--crit-soft); border-color:color-mix(in srgb, var(--crit) 40%, transparent); color:var(--crit); }
+.warn-btn{ background:var(--warn-soft); border-color:color-mix(in srgb, var(--warn) 40%, transparent); color:var(--warn); }
+.info-btn{ background:var(--info-soft); border-color:color-mix(in srgb, var(--info) 40%, transparent); color:var(--info); }
+
+.filter-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.chipfilter{ display:flex; gap:6px; }
+.fchip{ font-size:11.5px; font-weight:700; padding:6px 12px; border-radius:99px; border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim); }
+.fchip.active{ background:var(--info-soft); color:var(--accent); border-color:color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* ---- per-server alarm viewer (6 cols) ---- */
+.evt-row6{ display:grid; grid-template-columns:90px 90px 130px 1fr 100px 90px; gap:10px; padding:10px 4px; border-bottom:1px solid var(--border-soft); align-items:center; font-size:11.5px; }
+.evt-row6.head{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); font-weight:700; }
+.evt-row6 .t{ font-family:var(--font-mono); color:var(--text-dim); }
+@media (max-width:900px){ .evt-row6{ grid-template-columns:1fr 1fr; } .evt-row6.head{ display:none; } }
+
+/* ---- compare tables / visual compare ---- */
+.compare-table{ width:100%; border-collapse:collapse; font-size:12px; }
+.compare-table th, .compare-table td{
+  text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-soft);
+  vertical-align:middle;
+}
+.compare-table th{
+  font-size:10px; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--text-faint); font-weight:400;
+}
+.compare-table .mono{ font-family:var(--font-mono); }
+.compare-table .delta-pos{ color:var(--warn); font-weight:500; }
+.compare-table .delta-neg{ color:var(--info); font-weight:500; }
+.compare-table .delta-zero{ color:var(--text-faint); }
+.risk-pill{
+  display:inline-flex; padding:3px 8px; border-radius:99px; font-size:10.5px; font-weight:500;
+  letter-spacing:.04em;
+}
+.risk-pill.LOW{ background:var(--ok-soft); color:var(--ok); }
+.risk-pill.MEDIUM{ background:var(--warn-soft); color:var(--warn); }
+.risk-pill.HIGH, .risk-pill.CRITICAL{ background:var(--crit-soft); color:var(--crit); }
+
+.cmp-server{
+  margin-bottom:16px; padding:16px 18px;
+  background:rgba(6,14,24,.32); border:var(--frame);
+  border-radius:12px; box-shadow:var(--frame-glow);
+  backdrop-filter:blur(12px);
+}
+.cmp-server-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border-soft);
+}
+.cmp-server-head h4{
+  font-family:var(--font-display); font-size:13px; font-weight:400;
+  letter-spacing:.12em; text-transform:uppercase; color:#b8d8ef; margin:0;
+}
+.cmp-agree{
+  font-family:var(--font-mono); font-size:12px; font-weight:300; color:var(--text-dim);
+}
+.cmp-agree b{ color:var(--accent); font-weight:400; text-shadow:0 0 10px rgba(61,224,255,.35); }
+.cmp-metrics{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.cmp-metric{
+  background:rgba(4,12,22,.28); border:var(--frame-soft);
+  border-radius:10px; padding:12px 14px;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.cmp-metric:hover{ border-color:rgba(255,255,255,.14); box-shadow:var(--frame-glow); }
+.cmp-metric .m-title{
+  font-size:10px; letter-spacing:.12em; text-transform:uppercase; font-weight:400;
+  color:var(--text-faint); margin-bottom:10px;
+}
+.cmp-metric .m-title .tag{ font-family:var(--font-mono); font-size:9px; opacity:.7; letter-spacing:0; text-transform:none; margin-left:6px; }
+.cmp-lanes{ display:flex; flex-direction:column; gap:8px; }
+.cmp-lane{ display:grid; grid-template-columns:72px 1fr auto; gap:8px; align-items:center; }
+.cmp-lane .src{ font-size:10px; font-weight:400; letter-spacing:.06em; text-transform:uppercase; color:var(--text-dim); }
+.cmp-lane .track{ height:6px; background:rgba(61,224,255,.1); border-radius:99px; overflow:hidden; }
+.cmp-lane .fill{ height:100%; border-radius:99px; min-width:2px; }
+.cmp-lane .fill.sql{ background:linear-gradient(90deg,#1a6f8f,#3de0ff); box-shadow:0 0 8px rgba(61,224,255,.45); }
+.cmp-lane .fill.wb{ background:linear-gradient(90deg,#5a3d8f,#b78bff); box-shadow:0 0 8px rgba(183,139,255,.4); }
+.cmp-lane .val{ font-family:var(--font-mono); font-size:12px; font-weight:300; color:#e8f4ff; min-width:52px; text-align:right; }
+.cmp-delta{
+  margin-top:10px; padding-top:8px; border-top:1px solid rgba(61,224,255,.1);
+  font-size:11.5px; font-weight:300; display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.cmp-delta .badge{
+  font-family:var(--font-mono); font-size:11px; padding:3px 8px; border-radius:99px;
+}
+.cmp-delta .badge.sync{ background:var(--ok-soft); color:var(--ok); }
+.cmp-delta .badge.drift{ background:var(--warn-soft); color:var(--warn); }
+.cmp-delta .badge.gap{ background:var(--crit-soft); color:var(--crit); }
+.cmp-delta .note{ color:var(--text-faint); font-size:11px; }
+.cmp-ai{
+  margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  font-size:12px; font-weight:300; color:var(--text-dim);
+}
+.sql-table-wrap{ overflow:auto; max-height:320px; border:1px solid var(--border-soft); border-radius:var(--radius-md); }
+.sql-table{ width:100%; border-collapse:collapse; font-size:11.5px; }
+.sql-table th, .sql-table td{ padding:7px 10px; border-bottom:1px solid var(--border-soft); white-space:nowrap; }
+.sql-table th{ position:sticky; top:0; background:var(--panel-2); font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); }
+.sql-table .mono{ font-family:var(--font-mono); }
+
+/* ---- AI Q&A widget ---- */
+.ai-widget{
+  position:fixed; right:18px; bottom:18px; z-index:50; width:320px;
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.ai-widget.collapsed .ai-widget-body{ display:none; }
+.ai-widget-head{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:12px 14px; background:var(--panel-2); border-bottom:1px solid var(--border-soft);
+  cursor:pointer; user-select:none;
+}
+.ai-widget-head b{ font-family:var(--font-display); font-size:13px; }
+.ai-widget-body{ padding:12px 14px 14px; max-height:360px; overflow:auto; }
+.ai-q{
+  display:block; width:100%; text-align:left; margin-bottom:7px;
+  padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); font-size:12px; font-weight:600;
+}
+.ai-q:hover{ border-color:var(--accent); color:var(--accent); }
+.ai-a{
+  margin-top:10px; padding:10px 12px; border-radius:var(--radius-md);
+  background:var(--info-soft); border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  font-size:12.5px; line-height:1.45; color:var(--text);
+}
+.ai-a .lbl{ font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo-wrap">
+        <img class="brand-logo" src="/assets/schneider-aveva-logo.png?v=2" alt="Schneider Electric | AVEVA" />
+      </div>
+      <h1>Data Center</h1>
+      <p>Real-time monitoring · SQL-backed controls</p>
+      <div class="db-chip" id="brandDbChip"><span class="dot"></span> <span id="brandDbText">Checking DB…</span></div>
+    </div>
+
+    <div class="navgroup">
+      <div class="label">Executive</div>
+      <button class="navitem active" data-view="summary"><span class="ic">▦</span> TOP LEVEL MANAGEMENT</button>
+    </div>
+
+    <div class="navgroup">
+      <div class="label">Navigation</div>
+      <button class="navitem" data-view="overview"><span class="ic">▤</span> Overview</button>
+      <button class="navitem" data-view="server" data-server="1"><span class="ic">▢</span> Server 1 <span class="dot" id="nav-dot-1"></span></button>
+      <button class="navitem" data-view="server" data-server="2"><span class="ic">▢</span> Server 2 <span class="dot" id="nav-dot-2"></span></button>
+      <button class="navitem" data-view="server" data-server="3"><span class="ic">▢</span> Server 3 <span class="dot" id="nav-dot-3"></span></button>
+      <button class="navitem" data-view="server" data-server="4"><span class="ic">▢</span> Server 4 <span class="dot" id="nav-dot-4"></span></button>
+    </div>
+
+    <div class="navgroup">
+      <div class="label">Intelligence</div>
+      <button class="navitem" data-view="ai"><span class="ic">◆</span> AI Analytics</button>
+      <button class="navitem" data-view="compare"><span class="ic">⇄</span> Workbench Compare</button>
+      <button class="navitem" data-view="wbmon"><span class="ic">∿</span> Workbench Monitor</button>
+    </div>
+
+    <div class="navgroup">
+      <div class="label">Reports</div>
+      <button class="navitem" data-view="report"><span class="ic">▤</span> Report Builder</button>
+      <button class="navitem" data-view="alarms"><span class="ic">▲</span> Alarm Summary <span class="badge zero" id="nav-alarm-badge">0</span></button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="theme-row">
+        <span class="lbl">Theme</span>
+        <button class="themeswitch" id="themeToggle"><span class="knob" id="themeKnob">☀</span></button>
+      </div>
+      <p style="font-size:10.5px; color:var(--text-faint); padding:8px 10px 0; line-height:1.5;">Shortcuts: <b>S</b> Top Level Mgmt · <b>1–4</b> servers · <b>O</b> overview · <b>I</b> AI · <b>C</b> compare · <b>W</b> WB monitor · <b>R</b> report · <b>A</b> alarms</p>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2 id="viewTitle">TOP LEVEL MANAGEMENT</h2>
+        <p class="sub" id="viewSub">Executive fleet performance · pie charts · monthly trends · top servers</p>
+      </div>
+      <div class="topbar-right">
+        <span class="pill clock" id="clockPill">--:--:--</span>
+        <span class="pill" id="stalePill">no data yet</span>
+        <span class="pill down" id="connPill"><span class="dot"></span> Connecting…</span>
+        <span class="pill" id="dbStatusPill" title="Database connection status"><span class="dot"></span> DB…</span>
+        <button class="btn" id="refreshBtn">↻ Refresh</button>
+        <button class="btn" id="pauseBtn">⏸ Pause Live</button>
+      </div>
+    </div>
+
+    <div class="banner" id="dbBanner">⚠ <span id="dbBannerText">Database disconnected — showing last known values.</span></div>
+
+    <!-- ===== OVERVIEW ===== -->
+    <section class="view" id="view-overview">
+      <div class="grid g-7" style="margin-bottom:16px;">
+        <div class="stat info"><div class="lbl">Total Servers</div><div class="val" id="s-total">4</div></div>
+        <div class="stat ok"><div class="lbl">Online</div><div class="val" id="s-online">0</div></div>
+        <div class="stat" id="s-alarms-card"><div class="lbl">Alarms</div><div class="val" id="s-alarms">0</div></div>
+        <div class="stat info"><div class="lbl">Avg CPU</div><div class="val" id="s-avgcpu">0<span class="unit">%</span></div></div>
+        <div class="stat info"><div class="lbl">Avg RAM</div><div class="val" id="s-avgram">0<span class="unit">%</span></div></div>
+        <div class="stat" id="s-temp-card"><div class="lbl">Max Temp</div><div class="val" id="s-maxtemp">0<span class="unit">°C</span></div></div>
+        <div class="stat info"><div class="lbl">Total Network</div><div class="val" id="s-net">0<span class="unit">Mbps</span></div></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">▤</span> Overall Performance (All Servers) <span class="hint">live average</span></h3>
+        <div class="metric-bar-row">
+          <div class="top"><span class="name">CPU</span><span class="num" id="bar-cpu-n">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-cpu" style="width:0%; background:var(--accent);"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="top"><span class="name">RAM</span><span class="num" id="bar-ram-n">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-ram" style="width:0%; background:#b78bff;"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="top"><span class="name">Disk</span><span class="num" id="bar-disk-n">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-disk" style="width:0%; background:var(--warn);"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="top"><span class="name">Network <span style="font-weight:400; color:var(--text-faint);">(of 1,200 Mbps provisioned)</span></span><span class="num" id="bar-net-n">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-net" style="width:0%; background:var(--ok);"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">⚡</span> Quick Actions</h3>
+        <div class="actions-grid">
+          <button class="action-btn a1" id="qa-refresh"><span class="ic">↻</span> Refresh All Data</button>
+          <button class="action-btn a2" id="qa-health"><span class="ic">✓</span> Health Check</button>
+          <button class="action-btn a3" id="qa-alarms"><span class="ic">▲</span> Alarm Summary</button>
+          <button class="action-btn a4" id="qa-report"><span class="ic">⬇</span> Export Report</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">◈</span> System Health Status</h3>
+        <div class="grid g-3">
+          <div class="status-card"><div class="ic">▣</div><div><b>CPU Status</b><div class="state ok" id="hc-cpu-state">Normal</div><p id="hc-cpu-text">All servers operating within normal range.</p></div></div>
+          <div class="status-card"><div class="ic">◐</div><div><b>Memory Status</b><div class="state ok" id="hc-ram-state">Normal</div><p id="hc-ram-text">All servers operating within normal range.</p></div></div>
+          <div class="status-card"><div class="ic">▥</div><div><b>Disk Status</b><div class="state ok" id="hc-disk-state">Normal</div><p id="hc-disk-text">All servers operating within normal range.</p></div></div>
+        </div>
+      </div>
+
+      <div class="grid g-2" id="overview-servers" style="grid-template-columns:repeat(2,1fr); margin-top:16px;"></div>
+    </section>
+
+    <!-- ===== SERVER DETAIL (template reused for 1-4) ===== -->
+    <section class="view" id="view-server">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">▢</span> Key Metrics</h3>
+        <div class="grid g-4" id="srv-metrics"></div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">∿</span> Live Monitor <span class="hint">embedded SCADA traces · hover for exact sample</span></h3>
+        <div class="grid g-3" id="srv-scopes" style="grid-template-columns:1fr 1fr 1fr;"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">▲</span> Alarm Status <span class="hint" id="srv-alarm-title"></span></h3>
+        <div class="grid g-3" id="srv-alarm-status"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">🎮</span> Server Controls <span class="hint">writes to SQL for this server (1–4)</span></h3>
+        <div class="controls-row">
+          <button class="btn crit-btn" id="ctl-off">⏻ Toggle Off</button>
+          <button class="btn warn-btn" id="ctl-stress">⚡ CPU Stress Test</button>
+          <button class="btn info-btn" id="ctl-reset">↻ Reset Server</button>
+          <button class="btn ghost" id="ctl-refresh">↻ Refresh Data</button>
+          <button class="btn ghost" id="ctl-back">← Back to Overview</button>
+        </div>
+        <div class="note" id="ctl-msg" style="display:none;"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">⇄</span> Workbench vs SQL vs AI <span class="hint">live tags · workbench · trained model</span></h3>
+        <div id="srv-compare" class="loading-inline">Loading comparison…</div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">▤</span> Alarm Viewer <span class="hint" id="srv-evt-title"></span></h3>
+        <div class="evt-row6 head"><div>Time</div><div>Date</div><div>Alarm Tag</div><div>Comment</div><div>Status</div><div>Priority</div></div>
+        <div id="srv-evt-list"></div>
+      </div>
+    </section>
+
+    <!-- ===== AI ANALYTICS ===== -->
+    <section class="view" id="view-ai">
+      <div class="grid g-4" style="margin-bottom:16px;">
+        <div class="stat info"><div class="lbl">System Health</div><div class="val" id="ai-health">–</div></div>
+        <div class="stat" id="ai-risk-card"><div class="lbl">Risk Level</div><div class="val" id="ai-risk">–</div></div>
+        <div class="stat crit"><div class="lbl">Critical Actions</div><div class="val" id="ai-crit">0</div></div>
+        <div class="stat warn"><div class="lbl">High-Priority Actions</div><div class="val" id="ai-high">0</div></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">▣</span> Per-Server Health</h3>
+        <div class="grid g-4" id="ai-server-kpis"></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">◎</span> Monitored Challenges</h3>
+        <div class="grid g-2" id="ai-challenges"></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">✎</span> Recommendations <span class="hint">deterministic, evidence-based</span></h3>
+        <div id="ai-recs"></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">▤</span> Research Basis</h3>
+        <div id="ai-sources"></div>
+      </div>
+    </section>
+
+    <!-- ===== TOP LEVEL MANAGEMENT (executive) ===== -->
+    <section class="view active" id="view-summary">
+      <div class="tlm-kpis" id="tlm-kpis">
+        <div class="tlm-kpi"><div class="lbl">Fleet Health</div><div class="val" id="sum-health">–</div><div class="delta flat" id="sum-health-delta">CEO health index</div></div>
+        <div class="tlm-kpi"><div class="lbl">Servers Online</div><div class="val" id="sum-online">–</div><div class="delta flat" id="sum-online-delta">of 4 production servers</div></div>
+        <div class="tlm-kpi"><div class="lbl">Fleet Performance</div><div class="val" id="sum-fleet-perf">–</div><div class="delta flat">composite score / 100</div></div>
+        <div class="tlm-kpi tlm-risk-click" id="sum-risk-card" title="Open Alarm Summary" role="button" tabindex="0">
+          <div class="lbl">Business Risk</div>
+          <div class="val" id="sum-risk">–</div>
+          <div class="delta flat" id="sum-alarms-delta">alarms in last 24h: – · click for Alarm Summary</div>
+        </div>
+      </div>
+
+      <div class="tlm-grid">
+        <div class="tlm-card">
+          <h4>Server Performance Share</h4>
+          <div class="sub">How much of fleet CPU each server is using right now</div>
+          <div class="tlm-canvas-wrap"><canvas id="tlm-pie-load"></canvas></div>
+          <div class="tlm-legend" id="tlm-legend-load"></div>
+        </div>
+        <div class="tlm-card">
+          <h4>Availability</h4>
+          <div class="sub">Servers currently online vs offline</div>
+          <div class="tlm-canvas-wrap"><canvas id="tlm-pie-status"></canvas></div>
+          <div class="tlm-legend" id="tlm-legend-status"></div>
+        </div>
+        <div class="tlm-card">
+          <h4>Health Mix</h4>
+          <div class="sub">Healthy = no alarms · Watch = warning · Critical = down / multi-alarm</div>
+          <div class="tlm-canvas-wrap"><canvas id="tlm-pie-health"></canvas></div>
+          <div class="tlm-legend" id="tlm-legend-health"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:0; margin-bottom:16px;">
+        <h3><span class="ic">▢</span> Server Snapshot <span class="hint">drill-down to live server pages</span></h3>
+        <div class="grid g-4" id="sum-cards"></div>
+      </div>
+
+      <div class="tlm-grid-2">
+        <div class="tlm-card tlm-hero-bg">
+          <h4>Capacity Headroom</h4>
+          <div class="sub">Room left before warning thresholds (higher % = safer)</div>
+          <div class="tlm-gauge-grid" id="tlm-gauges"></div>
+        </div>
+        <div class="tlm-card tlm-rank-card">
+          <h4>Top Performance</h4>
+          <div class="sub">Best to worst by headroom, temperature, latency and availability</div>
+          <ol class="tlm-rank" id="tlm-top-list"></ol>
+        </div>
+      </div>
+
+      <div class="tlm-grid-2" style="margin-top:0;">
+        <div class="tlm-card">
+          <h4>Risk Heatmap</h4>
+          <div class="sub">OK · Watch · Critical — hotspots across the fleet</div>
+          <div class="tlm-heat-wrap">
+            <table class="tlm-heat" id="tlm-heatmap"></table>
+            <div class="tlm-heat-legend">
+              <span><i style="background:#54e6a8;color:#54e6a8"></i>OK</span>
+              <span><i style="background:#ffd166;color:#ffd166"></i>Watch</span>
+              <span><i style="background:#ff5a5a;color:#ff5a5a"></i>Critical</span>
+            </div>
+          </div>
+        </div>
+        <div class="tlm-card">
+          <h4>Performance per Month</h4>
+          <div class="sub">Neon bars = executive score (higher is better) · Cyan line = average CPU %</div>
+          <div class="tlm-canvas-wrap tall"><canvas id="tlm-monthly"></canvas></div>
+        </div>
+      </div>
+
+      <div class="tlm-card" style="margin-bottom:16px; min-height:320px;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h4>Alarms Over Time</h4>
+            <div class="sub" id="tlm-alarm-sub">Active vs cleared alarm events — are things getting better or worse?</div>
+          </div>
+          <div class="tlm-alarm-toggle" id="tlm-alarm-range">
+            <button class="fchip active" data-range="24h">Last 24 hours</button>
+            <button class="fchip" data-range="7d">Last 7 days</button>
+          </div>
+        </div>
+        <div class="tlm-canvas-wrap tall"><canvas id="tlm-alarm-trend"></canvas></div>
+      </div>
+
+      <div class="tlm-strip" id="tlm-strip">
+        <div class="seg"><span class="dot"></span> SCADA OPS · FLEET LIVE</div>
+        <div class="seg">HEALTH <span class="glow-o" id="tlm-strip-health">–</span></div>
+        <div class="seg">ONLINE <span class="glow" id="tlm-strip-online">–</span></div>
+        <div class="seg">PERF <span class="glow-o" id="tlm-strip-perf">–</span></div>
+        <div class="seg tlm-risk-click" id="tlm-strip-risk-seg" title="Open Alarm Summary" role="button" tabindex="0">RISK <span class="glow" id="tlm-strip-risk">–</span></div>
+      </div>
+    </section>
+
+    <!-- ===== REPORT BUILDER ===== -->
+    <section class="view" id="view-report">
+      <div class="grid g-2" style="align-items:start;">
+        <div class="panel">
+          <h3><span class="ic">▤</span> Report Filters</h3>
+
+          <div class="grid g-2">
+            <div class="field"><label>Report Type</label>
+              <select id="rp-type">
+                <option value="executive">Executive Health Report</option>
+                <option value="technical">Technical KPI Report</option>
+                <option value="capacity">Capacity &amp; Risk Report</option>
+                <option value="alarms">Alarm &amp; Incident Report</option>
+              </select>
+            </div>
+            <div class="field"><label>Server Scope</label>
+              <select id="rp-scope">
+                <option value="all">All Servers</option>
+                <option value="server1">Server 1</option>
+                <option value="server2">Server 2</option>
+                <option value="server3">Server 3</option>
+                <option value="server4">Server 4</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid g-2">
+            <div class="field"><label>Time Range</label>
+              <select id="rp-range">
+                <option value="current">Current Snapshot</option>
+                <option value="1h">Last 1 Hour</option>
+                <option value="24h">Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            <div class="field"><label>Export Format</label>
+              <select id="rp-format">
+                <option value="pdf">PDF with Logos</option>
+                <option value="csv">CSV (raw rows)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid g-2" id="rp-custom-dates" style="display:none;">
+            <div class="field"><label>From</label><input type="date" id="rp-from"></div>
+            <div class="field"><label>To</label><input type="date" id="rp-to"></div>
+          </div>
+
+          <div class="field">
+            <label>Include in Report</label>
+            <div class="check-grid">
+              <label class="checkopt"><input type="checkbox" value="cpu" checked> CPU</label>
+              <label class="checkopt"><input type="checkbox" value="ram" checked> RAM</label>
+              <label class="checkopt"><input type="checkbox" value="disk" checked> Disk</label>
+              <label class="checkopt"><input type="checkbox" value="temperature" checked> Temperature</label>
+              <label class="checkopt"><input type="checkbox" value="network" checked> Network</label>
+              <label class="checkopt"><input type="checkbox" value="latency" checked> Latency</label>
+              <label class="checkopt"><input type="checkbox" value="status" checked> Status</label>
+              <label class="checkopt"><input type="checkbox" value="health" checked> Health Score</label>
+              <label class="checkopt"><input type="checkbox" value="recommendations" checked> AI Recommendations</label>
+              <label class="checkopt"><input type="checkbox" value="workbench" checked> Workbench / Tag Updates</label>
+              <label class="checkopt"><input type="checkbox" value="alarms"> Alarm Events</label>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px; margin-top:6px;">
+            <button class="btn primary" id="rp-preview" style="flex:1; justify-content:center;">◎ Generate Preview</button>
+            <button class="btn ok" id="rp-download" style="flex:1; justify-content:center;">⬇ Generate &amp; Download</button>
+          </div>
+          <div class="note">Reports are generated from live SQL data. Server Controls (Toggle / Stress / Reset) write back into SQL so charts and workbench views stay in sync.</div>
+        </div>
+
+        <div class="panel" id="rp-preview-panel">
+          <h3><span class="ic">▤</span> Report Preview</h3>
+          <div class="preview-empty" id="rp-empty">
+            <div class="ic">▤</div>
+            <b>Select filters and generate a preview</b>
+            <span>The preview summarizes matching SQL rows, KPIs and AI recommendations before you download.</span>
+          </div>
+          <div id="rp-content" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h3><span class="ic">▤</span> SQL History Rows <span class="hint" id="rp-sql-hint">same table as live charts</span></h3>
+        <div class="filter-row" style="margin-bottom:10px;">
+          <select id="rp-sql-server" style="max-width:160px;">
+            <option value="1">Server 1</option>
+            <option value="2">Server 2</option>
+            <option value="3">Server 3</option>
+            <option value="4">Server 4</option>
+          </select>
+          <button class="btn sm" id="rp-sql-refresh">↻ Load SQL Rows</button>
+        </div>
+        <div class="sql-table-wrap">
+          <table class="sql-table">
+            <thead>
+              <tr>
+                <th>RecordedAt</th><th>Server</th><th>CPU</th><th>RAM</th><th>Disk</th>
+                <th>Temp</th><th>Network</th><th>Latency</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="rp-sql-body">
+              <tr><td colspan="9" class="loading-inline">Open Report Builder and load SQL rows.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== WORKBENCH COMPARE ===== -->
+    <section class="view" id="view-compare">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">⇄</span> Fleet Workbench Comparison <span class="hint" id="cmp-model-hint">SQL vs Workbench · visual sync · AI</span></h3>
+        <div id="cmp-fleet" class="loading-inline">Loading comparison…</div>
+      </div>
+      <div class="panel">
+        <h3><span class="ic">▤</span> All Workbench Tags</h3>
+        <div class="sql-table-wrap">
+          <table class="sql-table">
+            <thead><tr><th>TagName</th><th>Value</th><th>UpdatedAt</th></tr></thead>
+            <tbody id="cmp-tags-body"><tr><td colspan="3" class="loading-inline">Loading tags…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== WORKBENCH MONITOR (ServerMonitoringHistory) ===== -->
+    <section class="view" id="view-wbmon">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">∿</span> Workbench Monitor <span class="hint">dbo.ServerMonitoringHistory · refresh every 45s</span></h3>
+        <div class="filter-row" style="margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+          <div class="chipfilter" id="wbmon-server-filter">
+            <button class="fchip active" data-server="1">Server 1</button>
+            <button class="fchip" data-server="2">Server 2</button>
+            <button class="fchip" data-server="3">Server 3</button>
+            <button class="fchip" data-server="4">Server 4</button>
+          </div>
+          <button class="btn sm" id="wbmon-refresh">↻ Refresh Now</button>
+          <span class="pill" id="wbmon-meta" style="font-weight:600;">no samples yet</span>
+        </div>
+        <div class="note" id="wbmon-note" style="margin-top:0;">Graphs read updated values from ServerMonitoringHistory. Newest point is aligned with ServerMonitoringValues when history CPU is zero.</div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">▢</span> Latest Workbench Values <span class="hint" id="wbmon-latest-hint">latest history / live overlay</span></h3>
+        <div class="grid g-4" id="wbmon-kpis"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">▤</span> Live Workbench Charts <span class="hint">column charts · value labels · DB every 45s · hover for exact value</span></h3>
+        <div class="grid g-3" id="wbmon-scopes" style="grid-template-columns:1fr 1fr 1fr;"></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ic">▤</span> Recent ServerMonitoringHistory Rows <span class="hint" id="wbmon-table-hint">newest first</span></h3>
+        <div class="sql-table-wrap">
+          <table class="sql-table">
+            <thead>
+              <tr>
+                <th>RecordedAt</th><th>CPU</th><th>RAM</th><th>Disk</th>
+                <th>Temp</th><th>Network</th><th>Latency</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="wbmon-sql-body">
+              <tr><td colspan="8" class="loading-inline">Open Workbench Monitor to load history.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ALARM SUMMARY ===== -->
+    <section class="view" id="view-alarms">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3><span class="ic">▲</span> Alarm History <span class="hint" id="evt-count-hint">top 3 per server from AlarmEvents</span></h3>
+        <div class="filter-row">
+          <div class="chipfilter" id="evt-sev-filter">
+            <button class="fchip active" data-sev="ALL">All</button>
+            <button class="fchip" data-sev="ACTIVE">Active</button>
+            <button class="fchip" data-sev="CLEARED">Cleared</button>
+            <button class="fchip" data-sev="INFO">Info</button>
+          </div>
+          <select id="evt-server-filter" style="max-width:160px;">
+            <option value="all">All Servers</option>
+            <option value="1">Server 1</option>
+            <option value="2">Server 2</option>
+            <option value="3">Server 3</option>
+            <option value="4">Server 4</option>
+          </select>
+          <button class="btn sm" id="evt-refresh">↻ Refresh Alarms</button>
+        </div>
+        <div class="note" style="margin-top:10px;">Shows the newest 3 rows from <b>dbo.AlarmEvents</b> for each server, with live CPU / RAM / Temp / Status readings from SQL.</div>
+      </div>
+      <div id="evt-by-server"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Static AI Q&A widget -->
+<div class="ai-widget" id="aiWidget">
+  <div class="ai-widget-head" id="aiWidgetToggle">
+    <b>◆ Server AI Assistant</b>
+    <span class="btn sm" id="aiWidgetChevron">−</span>
+  </div>
+  <div class="ai-widget-body">
+    <div id="aiQuestions"></div>
+    <div class="ai-a" id="aiAnswer" style="display:none;">
+      <div class="lbl">Answer</div>
+      <div id="aiAnswerText"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG / STATE
+   ============================================================ */
+const API = ""; // same origin as the backend HTTP server
+const POLL_MS = 45000;         // refresh UI from SQL every 45 seconds
+const HISTORY_MS = 45000;      // heartbeat charts sync with DB every 45 seconds
+const HEARTBEAT_MAX = 48;      // rolling client buffer (~36 min at 45s)
+const NETWORK_CAPACITY_MBPS = 1200; // assumed provisioned capacity for the overview % bar (4 x 300 Mbps) — adjust if your fleet differs
+
+const THRESHOLDS = { cpu_warning:75, cpu_critical:90, ram_warning:80, ram_critical:90, disk_warning:80, disk_critical:90, temp_warning:60, temp_critical:75, latency_warning:30, latency_critical:50 };
+
+let currentView = "summary";
+let currentServer = 1;
+let wbMonServer = 1;
+let live = true;
+let lastState = null;
+let lastStateAt = null;
+let lastCompare = null;
+let lastDbStatus = null;
+let lastWbMonitor = null;
+let stateTimer = null, histTimer = null, wbHistTimer = null, analyticsTimer = null;
+const scopeBuffers = {}; // server -> rolling heartbeat sample rows
+const heartbeatTrace = {}; // server -> walking buffer for server detail
+const wbHeartbeatTrace = {}; // server -> walking buffer for workbench monitor
+
+/* ============================================================
+   THEME
+   ============================================================ */
+const root = document.documentElement;
+function setTheme(t){
+  root.setAttribute('data-theme', t);
+  document.getElementById('themeKnob').textContent = t === 'dark' ? '☾' : '☀';
+  localStorage.setItem('dc_theme', t);
+}
+setTheme(localStorage.getItem('dc_theme') || 'dark');
+document.getElementById('themeToggle').addEventListener('click', () => {
+  setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const $ = (sel, ctx=document) => ctx.querySelector(sel);
+const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+const fmt1 = v => (Math.round((v ?? 0) * 10) / 10).toFixed(1);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function classify(v, warn, crit){ if (v >= crit) return 'crit'; if (v >= warn) return 'warn'; return 'ok'; }
+function stateColor(s){ return s === 'crit' ? 'var(--crit)' : s === 'warn' ? 'var(--warn)' : 'var(--ok)'; }
+function chipClass(backendState){ return backendState === 'critical' ? 'crit' : backendState === 'warning' ? 'warn' : 'ok'; }
+
+async function api(path){
+  const res = await fetch(API + path, { cache: 'no-store' });
+  if (!res.ok){
+    let msg = res.statusText;
+    try{ const j = await res.json(); msg = j.error || msg; }catch(e){}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+function tickClock(){
+  document.getElementById('clockPill').textContent = new Date().toLocaleTimeString();
+  const stale = document.getElementById('stalePill');
+  if (!lastStateAt){ stale.textContent = 'no data yet'; stale.style.color = 'var(--text-faint)'; return; }
+  const secs = Math.round((Date.now() - lastStateAt) / 1000);
+  stale.textContent = secs <= 2 ? 'updated just now' : `updated ${secs}s ago`;
+  stale.style.color = secs > 90 ? 'var(--crit)' : secs > 50 ? 'var(--warn)' : 'var(--text-dim)';
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+const viewTitles = {
+  summary: ["TOP LEVEL MANAGEMENT", "SCADA mission control · neon fleet KPIs · risk · capacity · alarms"],
+  overview: ["Overview", "All servers · updated every 45 seconds from SQL Server"],
+  server: ["Server", "Real-time metrics for this server · charts refresh every 45s"],
+  ai: ["AI Analytics", "Explainable, rule-based AIOps recommendations"],
+  compare: ["Workbench Compare", "SQL state vs ServerMonitoringValues / WB tags vs AI predictions"],
+  wbmon: ["Workbench Monitor", "ServerMonitoringHistory column charts · refresh every 45s"],
+  report: ["Report Builder", "Filter, preview and export PDF or CSV reports"],
+  alarms: ["Alarm Summary", "Most recent alarm and recovery events"],
+};
+
+function showView(view, serverNum){
+  currentView = view;
+  if (view === 'server') currentServer = serverNum || currentServer || 1;
+
+  $$('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  document.body.classList.toggle('tlm-scada', view === 'summary');
+
+  $$('.navitem').forEach(n => n.classList.remove('active'));
+  if (view === 'server'){
+    const btn = document.querySelector(`.navitem[data-view="server"][data-server="${currentServer}"]`);
+    if (btn) btn.classList.add('active');
+  } else {
+    const btn = document.querySelector(`.navitem[data-view="${view}"]`);
+    if (btn) btn.classList.add('active');
+  }
+
+  const [title, sub] = viewTitles[view];
+  document.getElementById('viewTitle').textContent = view === 'server' ? `Server ${currentServer} — Detailed Monitoring` : title;
+  document.getElementById('viewSub').textContent = sub;
+  document.getElementById('pauseBtn').style.display =
+    (view === 'overview' || view === 'server' || view === 'wbmon') ? 'inline-flex' : 'none';
+
+  clearInterval(histTimer);
+  clearInterval(wbHistTimer);
+  stopScopeAnimation();
+  if (view === 'server'){
+    buildScopeShells('srv-scopes', 'scope');
+    pollServerDetail();
+    if (live){
+      histTimer = setInterval(pollServerDetail, HISTORY_MS);
+    }
+  }
+  if (view === 'wbmon'){
+    buildScopeShells('wbmon-scopes', 'wb');
+    pullWorkbenchMonitor(true);
+    if (live){
+      wbHistTimer = setInterval(() => pullWorkbenchMonitor(false), HISTORY_MS);
+    }
+  }
+  if (view === 'ai') pullAnalytics(true);
+  if (view === 'compare') pullCompare(true);
+  if (view === 'summary') pullSummary();
+  if (view === 'alarms') pullEvents();
+  if (view === 'report') loadReportSqlTable();
+}
+
+function pollServerDetail(){
+  pullHistory();
+  pullServerEvents(currentServer);
+  pullCompare(false);
+}
+
+$$('.navitem').forEach(btn => {
+  btn.addEventListener('click', () => showView(btn.dataset.view, btn.dataset.server ? parseInt(btn.dataset.server) : null));
+});
+document.getElementById('qa-health').addEventListener('click', () => showView('ai'));
+document.getElementById('qa-alarms').addEventListener('click', () => showView('alarms'));
+document.getElementById('qa-report').addEventListener('click', () => showView('report'));
+document.getElementById('qa-refresh').addEventListener('click', doRefresh);
+document.getElementById('refreshBtn').addEventListener('click', doRefresh);
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  live = !live;
+  const b = document.getElementById('pauseBtn');
+  b.innerHTML = live ? '⏸ Pause Live' : '▶ Resume Live';
+  if (live){
+    startPolling();
+    if (currentView === 'server'){
+      pollServerDetail();
+      histTimer = setInterval(pollServerDetail, HISTORY_MS);
+    }
+    if (currentView === 'wbmon'){
+      pullWorkbenchMonitor(true);
+      wbHistTimer = setInterval(() => pullWorkbenchMonitor(false), HISTORY_MS);
+    }
+  } else {
+    clearInterval(stateTimer); clearInterval(histTimer); clearInterval(wbHistTimer);
+    stopScopeAnimation();
+  }
+});
+
+async function doRefresh(){
+  try{ await api('/api/refresh'); }catch(e){ /* surfaced via connection pill */ }
+  pullState();
+  pullDbStatus();
+  if (currentView === 'server') pollServerDetail();
+  if (currentView === 'wbmon') pullWorkbenchMonitor(true);
+  if (currentView === 'ai') pullAnalytics();
+  if (currentView === 'compare') pullCompare(true);
+  if (currentView === 'summary') pullSummary();
+  if (currentView === 'alarms') pullEvents();
+  if (currentView === 'report') loadReportSqlTable();
+}
+
+/* ============================================================
+   LIVE STATE POLLING  →  overview + server metrics + connection pill
+   ============================================================ */
+function startPolling(){
+  clearInterval(stateTimer);
+  pullState();
+  pullDbStatus();
+  stateTimer = setInterval(() => { pullState(); pullDbStatus(); }, POLL_MS);
+}
+
+async function pullState(){
+  try{
+    const data = await api('/api/state');
+    lastState = data;
+    lastStateAt = Date.now();
+    pushSpark(data.tags);
+    renderConnection(data);
+    renderOverview(data.tags);
+    if (currentView === 'server'){
+      renderServerMetrics(data.tags, currentServer);
+      if (lastCompare) renderServerCompare(lastCompare, currentServer);
+    }
+    renderNavDots(data.tags);
+  }catch(err){
+    renderConnection({ database_connected:false, database_error: err.message });
+  }
+}
+
+async function pullDbStatus(){
+  try{
+    lastDbStatus = await api('/api/db-status');
+    renderDbStatus(lastDbStatus);
+  }catch(err){
+    renderDbStatus({
+      database_connected: false,
+      status_label: 'Disconnected',
+      database_error: err.message,
+      database_name: 'DataCenterKPI',
+    });
+  }
+}
+
+function renderDbStatus(data){
+  const pill = document.getElementById('dbStatusPill');
+  const brand = document.getElementById('brandDbChip');
+  const brandText = document.getElementById('brandDbText');
+  const ok = !!data.database_connected;
+  const label = data.status_label || (ok ? `Connected to ${data.database_name || 'DataCenterKPI'}` : 'Disconnected');
+  if (pill){
+    pill.className = ok ? 'pill live' : 'pill down';
+    pill.innerHTML = `<span class="dot"></span> ${label}`;
+    pill.title = data.database_error || (data.history_table ? `History: ${data.history_table}` : 'Database status');
+  }
+  if (brand && brandText){
+    brand.className = 'db-chip ' + (ok ? 'ok' : 'bad');
+    brandText.textContent = ok ? (data.database_name || 'DataCenterKPI') : 'DB offline';
+  }
+}
+
+function renderConnection(data){
+  const pill = document.getElementById('connPill');
+  const banner = document.getElementById('dbBanner');
+  if (data.database_connected){
+    const name = (lastDbStatus && lastDbStatus.database_name) || 'DataCenterKPI';
+    pill.className = 'pill live';
+    pill.innerHTML = `<span class="dot"></span> Live · ${name}`;
+    banner.classList.remove('show');
+  } else {
+    pill.className = 'pill down'; pill.innerHTML = '<span class="dot"></span> Disconnected';
+    banner.classList.add('show');
+    document.getElementById('dbBannerText').textContent =
+      'Database disconnected' + (data.database_error ? ' — ' + data.database_error : '') + '. Showing last known values.';
+  }
+}
+
+function renderNavDots(tags){
+  for (let i=1; i<=4; i++){
+    const up = !!tags[`Server${i}_Status`];
+    const dot = document.getElementById('nav-dot-' + i);
+    if (dot) dot.style.background = up ? 'var(--ok)' : 'var(--crit)';
+  }
+}
+
+function renderOverview(tags){
+  document.getElementById('s-online').textContent = tags.DC_Servers_Up ?? 0;
+  document.getElementById('s-avgcpu').innerHTML = fmt1(tags.DC_Avg_CPU) + '<span class="unit">%</span>';
+  document.getElementById('s-avgram').innerHTML = fmt1(tags.DC_Avg_RAM) + '<span class="unit">%</span>';
+  document.getElementById('s-maxtemp').innerHTML = fmt1(tags.DC_Max_Temp) + '<span class="unit">°C</span>';
+  document.getElementById('s-net').innerHTML = fmt1(tags.DC_Total_Network) + '<span class="unit">Mbps</span>';
+
+  let alarms = 0;
+  for (let i=1;i<=4;i++){
+    if (tags[`Server${i}_CPU_Alarm`]) alarms++;
+    if (tags[`Server${i}_Temp_Alarm`]) alarms++;
+    if (tags[`Server${i}_Down_Alarm`]) alarms++;
+  }
+  document.getElementById('s-alarms').textContent = alarms;
+  document.getElementById('s-alarms-card').className = 'stat ' + (alarms > 0 ? 'crit' : 'ok');
+  document.getElementById('s-temp-card').className = 'stat ' + classify(tags.DC_Max_Temp ?? 0, THRESHOLDS.temp_warning, THRESHOLDS.temp_critical);
+
+  const cpu = tags.DC_Avg_CPU ?? 0, ram = tags.DC_Avg_RAM ?? 0, disk = tags.DC_Avg_Disk ?? 0;
+  const netPct = clamp(((tags.DC_Total_Network ?? 0) / NETWORK_CAPACITY_MBPS) * 100, 0, 100);
+  document.getElementById('bar-cpu').style.width = clamp(cpu,0,100) + '%'; document.getElementById('bar-cpu-n').textContent = fmt1(cpu) + '%';
+  document.getElementById('bar-ram').style.width = clamp(ram,0,100) + '%'; document.getElementById('bar-ram-n').textContent = fmt1(ram) + '%';
+  document.getElementById('bar-disk').style.width = clamp(disk,0,100) + '%'; document.getElementById('bar-disk-n').textContent = fmt1(disk) + '%';
+  document.getElementById('bar-net').style.width = netPct + '%'; document.getElementById('bar-net-n').textContent = fmt1(netPct) + '%';
+
+  renderHealthStatus(tags);
+  renderServerCards(tags);
+}
+
+function healthStatusFor(worstState){
+  return {
+    ok:   ["Normal", "All servers operating within normal range."],
+    warn: ["Watch", "One or more servers are approaching the alert threshold."],
+    crit: ["Critical", "One or more servers have breached the critical threshold."],
+  }[worstState];
+}
+
+function renderHealthStatus(tags){
+  let cpuWorst='ok', ramWorst='ok', diskWorst='ok';
+  for (let i=1;i<=4;i++){
+    if (!tags[`Server${i}_Status`]) continue;
+    const c = classify(tags[`Server${i}_CPU_Percent`]??0, THRESHOLDS.cpu_warning, THRESHOLDS.cpu_critical);
+    const r = classify(tags[`Server${i}_RAM_Percent`]??0, THRESHOLDS.ram_warning, THRESHOLDS.ram_critical);
+    const d = classify(tags[`Server${i}_Disk_Percent`]??0, THRESHOLDS.disk_warning, THRESHOLDS.disk_critical);
+    if (c==='crit'||cpuWorst==='crit') cpuWorst = c==='crit'?'crit':cpuWorst; else if (c==='warn') cpuWorst='warn';
+    if (r==='crit') ramWorst='crit'; else if (r==='warn' && ramWorst!=='crit') ramWorst='warn';
+    if (d==='crit') diskWorst='crit'; else if (d==='warn' && diskWorst!=='crit') diskWorst='warn';
+  }
+  [['cpu',cpuWorst],['ram',ramWorst],['disk',diskWorst]].forEach(([k,st])=>{
+    const [label, text] = healthStatusFor(st);
+    const stateEl = document.getElementById(`hc-${k}-state`);
+    stateEl.textContent = label; stateEl.className = 'state ' + st;
+    document.getElementById(`hc-${k}-text`).textContent = text;
+  });
+}
+
+function renderServerCards(tags){
+  const wrap = document.getElementById('overview-servers');
+  wrap.innerHTML = '';
+  for (let i=1;i<=4;i++){
+    const up = !!tags[`Server${i}_Status`];
+    const cpu = tags[`Server${i}_CPU_Percent`]??0, ram = tags[`Server${i}_RAM_Percent`]??0;
+    const disk = tags[`Server${i}_Disk_Percent`]??0, temp = tags[`Server${i}_Temp_C`]??0;
+    const cpuAlarm = tags[`Server${i}_CPU_Alarm`], tempAlarm = tags[`Server${i}_Temp_Alarm`], downAlarm = tags[`Server${i}_Down_Alarm`];
+    const card = document.createElement('div');
+    card.className = 'server-card';
+    card.innerHTML = `
+      <div class="head">
+        <span class="sdot" style="background:${up?'var(--ok)':'var(--crit)'}"></span>
+        <h4>Server ${i}</h4>
+        <span class="stpill ${up?'up':'down'}">${up?'● UP':'● DOWN'}</span>
+      </div>
+      <div class="mini-grid">
+        <div class="mini"><div class="l">CPU</div><div class="v">${fmt1(cpu)}%</div></div>
+        <div class="mini"><div class="l">RAM</div><div class="v">${fmt1(ram)}%</div></div>
+        <div class="mini"><div class="l">Disk</div><div class="v">${fmt1(disk)}%</div></div>
+        <div class="mini"><div class="l">Temp</div><div class="v">${fmt1(temp)}°C</div></div>
+      </div>
+      <div class="spark-wrap"><div class="lbl"><span>CPU trend</span><span>last ${SPARK_LEN}s</span></div><canvas class="spark" data-server="${i}"></canvas></div>
+      <div class="chips">
+        <span class="chip ${cpuAlarm?'on':''}">${cpuAlarm?'✓':'○'} CPU HIGH</span>
+        <span class="chip ${tempAlarm?'on':''}">${tempAlarm?'✓':'○'} TEMP HIGH</span>
+        <span class="chip ${downAlarm?'on':''}">${downAlarm?'✓':'○'} DOWN</span>
+      </div>
+      <div class="rowbtns">
+        <button class="btn sm" data-ctl="toggle" data-server="${i}">Toggle</button>
+        <button class="btn sm warn" data-ctl="stress" data-server="${i}">Stress</button>
+        <button class="btn sm" data-ctl="reset" data-server="${i}">Reset</button>
+        <button class="btn sm primary" data-open="${i}">Details</button>
+      </div>`;
+    wrap.appendChild(card);
+  }
+  $$('.rowbtns [data-ctl]', wrap).forEach(b => b.addEventListener('click', () => {
+    const action = b.dataset.ctl;
+    const server = parseInt(b.dataset.server, 10);
+    const path = action === 'toggle' ? `/api/toggle?server=${server}`
+      : action === 'stress' ? `/api/stress?server=${server}`
+      : `/api/reset?server=${server}`;
+    callControl(path, `${action} Server ${server}`);
+  }));
+  $$('.rowbtns [data-open]', wrap).forEach(b => b.addEventListener('click', () => showView('server', parseInt(b.dataset.open))));
+  drawAllSparks();
+}
+
+function flashReadOnly(){ /* controls are live — no-op */ }
+
+/* ============================================================
+   SERVER DETAIL VIEW
+   ============================================================ */
+function renderServerMetrics(tags, i){
+  const cpu = tags[`Server${i}_CPU_Percent`]??0, ram = tags[`Server${i}_RAM_Percent`]??0;
+  const disk = tags[`Server${i}_Disk_Percent`]??0, temp = tags[`Server${i}_Temp_C`]??0;
+  const net = tags[`Server${i}_Network_Mbps`]??0, lat = tags[`Server${i}_Latency_ms`]??0;
+  const up = !!tags[`Server${i}_Status`];
+  const wrap = document.getElementById('srv-metrics');
+  wrap.innerHTML = `
+    <div class="stat ${classify(cpu,THRESHOLDS.cpu_warning,THRESHOLDS.cpu_critical)}"><div class="lbl">CPU Usage</div><div class="val">${fmt1(cpu)}<span class="unit">%</span></div></div>
+    <div class="stat ${classify(ram,THRESHOLDS.ram_warning,THRESHOLDS.ram_critical)}"><div class="lbl">RAM Usage</div><div class="val">${fmt1(ram)}<span class="unit">%</span></div></div>
+    <div class="stat ${classify(disk,THRESHOLDS.disk_warning,THRESHOLDS.disk_critical)}"><div class="lbl">Disk Usage</div><div class="val">${fmt1(disk)}<span class="unit">%</span></div></div>
+    <div class="stat ${classify(temp,THRESHOLDS.temp_warning,THRESHOLDS.temp_critical)}"><div class="lbl">Temperature</div><div class="val">${fmt1(temp)}<span class="unit">°C</span></div></div>
+    <div class="stat info"><div class="lbl">Network</div><div class="val">${fmt1(net)}<span class="unit">Mbps</span></div></div>
+    <div class="stat ${classify(lat,THRESHOLDS.latency_warning,THRESHOLDS.latency_critical)}"><div class="lbl">Latency</div><div class="val">${fmt1(lat)}<span class="unit">ms</span></div></div>
+    <div class="stat ${up?'ok':'crit'}"><div class="lbl">Status</div><div class="val" style="font-size:19px;">${up?'● UP':'● DOWN'}</div></div>
+    <div class="stat"><div class="lbl">CPU Alarm / Temp Alarm</div><div class="val" style="font-size:16px;">${tags[`Server${i}_CPU_Alarm`]?'CPU ⚠':'CPU ok'} · ${tags[`Server${i}_Temp_Alarm`]?'Temp ⚠':'Temp ok'}</div></div>
+  `;
+  renderServerAlarmStatus(tags, i);
+  updateControlLabels(tags, i);
+}
+
+function updateControlLabels(tags, i){
+  const up = !!tags[`Server${i}_Status`];
+  const btn = document.getElementById('ctl-off');
+  if (!btn) return;
+  btn.textContent = up ? '⏻ Toggle Off' : '⏻ Toggle On';
+  btn.className = up ? 'btn crit-btn' : 'btn ok';
+}
+
+function renderServerAlarmStatus(tags, i){
+  document.getElementById('srv-alarm-title').textContent = `Server ${i}`;
+  const cpuAlarm = !!tags[`Server${i}_CPU_Alarm`];
+  const tempAlarm = !!tags[`Server${i}_Temp_Alarm`];
+  const downAlarm = !!tags[`Server${i}_Down_Alarm`];
+  const cards = [
+    { name:'CPU High Alarm', cond:`Server${i}_CPU_Percent > ${THRESHOLDS.cpu_critical}%`, active:cpuAlarm },
+    { name:'Temperature High Alarm', cond:`Server${i}_Temp_C > ${THRESHOLDS.temp_critical}°C`, active:tempAlarm },
+    { name:'Server Down Alarm', cond:`Server${i}_Status = OFF`, active:downAlarm },
+  ];
+  document.getElementById('srv-alarm-status').innerHTML = cards.map(c => `
+    <div class="alarm-status-card">
+      <div class="name">${c.name}</div>
+      <div class="cond">${c.cond}</div>
+      <div class="state ${c.active?'crit':'ok'}">${c.active?'⚠ ALARM':'✓ NORMAL'}</div>
+    </div>`).join('');
+}
+
+/* ---- server controls: toggle / stress / reset write into SQL for servers 1–4 ---- */
+function showCtlMsg(text, isError){
+  const el = document.getElementById('ctl-msg');
+  if (!el) return;
+  el.style.display = 'block';
+  el.textContent = text;
+  el.style.borderColor = isError ? 'color-mix(in srgb, var(--crit) 40%, transparent)' : 'color-mix(in srgb, var(--ok) 35%, transparent)';
+  el.style.color = isError ? 'var(--crit)' : 'var(--ok)';
+}
+async function callControl(path, label){
+  showCtlMsg(`${label}…`, false);
+  try{
+    const res = await fetch(API + path, { cache:'no-store' });
+    const data = await res.json().catch(()=>({}));
+    const ok = res.ok && data.success !== false;
+    showCtlMsg(data.message || (ok ? `${label} succeeded.` : `${label} failed (HTTP ${res.status}).`), !ok);
+    if (ok){
+      await pullState();
+      if (currentView === 'server'){
+        pollServerDetail();
+        updateControlLabels(lastState?.tags || {}, currentServer);
+      }
+      if (currentView === 'wbmon') pullWorkbenchMonitor(false);
+      if (currentView === 'compare') pullCompare(true);
+    }
+  }catch(e){
+    showCtlMsg(`${label} failed: ${e.message}`, true);
+  }
+}
+document.getElementById('ctl-off').addEventListener('click', () => callControl(`/api/toggle?server=${currentServer}`, 'Toggle'));
+document.getElementById('ctl-stress').addEventListener('click', () => callControl(`/api/stress?server=${currentServer}`, 'CPU Stress Test'));
+document.getElementById('ctl-reset').addEventListener('click', () => callControl(`/api/reset?server=${currentServer}`, 'Reset Server'));
+document.getElementById('ctl-refresh').addEventListener('click', doRefresh);
+document.getElementById('ctl-back').addEventListener('click', () => showView('overview'));
+
+function alarmTagFor(eventText){
+  const t = (eventText || '').toLowerCase();
+  if (t.includes('cpu')) return 'CPU_ALARM';
+  if (t.includes('temp')) return 'TEMP_ALARM';
+  if (t.includes('down') || t.includes('offline') || t.includes('restored')) return 'DOWN_ALARM';
+  return 'SYSTEM_EVENT';
+}
+async function pullServerEvents(i){
+  document.getElementById('srv-evt-title').textContent = `Server ${i} · top 3 + live`;
+  try{
+    const hist = await api('/api/alarms/history?per_server=3');
+    const block = (hist.servers || []).find(s => s.server === i) || { alarms: [], live: {} };
+    const events = block.alarms || [];
+    const live = block.live || {};
+    const list = document.getElementById('srv-evt-list');
+    if (!events.length){
+      list.innerHTML = `<div class="loading-inline">No AlarmEvents for Server ${i}. Live: CPU ${fmt1(live.cpu)}% · RAM ${fmt1(live.ram)}% · Temp ${fmt1(live.temperature)}°C.</div>`;
+      return;
+    }
+    list.innerHTML = events.map(e => {
+      const d = e.timestamp ? new Date(e.timestamp) : null;
+      const lv = e.live || live;
+      return `
+      <div class="evt-row6">
+        <div class="t">${d ? d.toLocaleTimeString() : '—'}</div>
+        <div class="t">${d ? d.toLocaleDateString() : '—'}</div>
+        <div>${alarmTagFor(e.event)}</div>
+        <div>${e.event}<div style="margin-top:4px;color:var(--text-dim);font-size:10.5px;font-family:var(--font-mono);">Live CPU ${fmt1(lv.cpu)}% · RAM ${fmt1(lv.ram)}% · Temp ${fmt1(lv.temperature)}°C · ${lv.status ? 'UP' : 'DOWN'}</div></div>
+        <div><span class="sev ${String(e.status||'').toLowerCase()}">${e.status}</span></div>
+        <div><span class="sev ${String(e.severity||'').toLowerCase()}">${e.severity}</span></div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('srv-evt-list').innerHTML = `<div class="loading-inline">Could not load alarm history: ${e.message}</div>`;
+  }
+}
+
+const SCOPES = [
+  { key:'cpu', label:'CPU Usage', unit:'%', color:'var(--scope-cpu)', field:'cpu', min:0, max:100 },
+  { key:'ram', label:'RAM Usage', unit:'%', color:'var(--scope-ram)', field:'ram', min:0, max:100 },
+  { key:'disk', label:'Disk Usage', unit:'%', color:'var(--scope-disk)', field:'disk', min:0, max:100 },
+  { key:'temperature', label:'Temperature', unit:'°C', color:'var(--scope-temp)', field:'temperature', min:0, max:90 },
+  { key:'latency', label:'Latency', unit:'ms', color:'var(--scope-lat)', field:'latency', min:0, max:60 },
+];
+
+const scopeDrawMeta = {}; // `${prefix}:${key}` -> last draw geometry for hover hit-testing
+const scopeAnim = {
+  // scrolling ECG phase (0..1) shared across scopes for a coherent instrument look
+  phase: 0,
+  raf: null,
+  lastTs: 0,
+};
+
+/** Classic QRS beat shape over t in [0,1], returns offset in roughly [-0.25, 1]. */
+function ecgBeatShape(t){
+  // normalize into one beat
+  const x = ((t % 1) + 1) % 1;
+  // baseline
+  let y = 0;
+  // P wave
+  if (x > 0.08 && x < 0.18){
+    const u = (x - 0.08) / 0.10;
+    y += 0.18 * Math.sin(Math.PI * u);
+  }
+  // Q dip
+  if (x > 0.28 && x < 0.34){
+    const u = (x - 0.28) / 0.06;
+    y += -0.22 * Math.sin(Math.PI * u);
+  }
+  // R spike (main heartbeat)
+  if (x > 0.34 && x < 0.42){
+    const u = (x - 0.34) / 0.08;
+    // sharp triangular QRS
+    y += u < 0.45 ? (u / 0.45) * 1.0 : (1 - (u - 0.45) / 0.55) * 1.0;
+  }
+  // S dip
+  if (x > 0.42 && x < 0.50){
+    const u = (x - 0.42) / 0.08;
+    y += -0.35 * Math.sin(Math.PI * u);
+  }
+  // T wave
+  if (x > 0.55 && x < 0.78){
+    const u = (x - 0.55) / 0.23;
+    y += 0.28 * Math.sin(Math.PI * u);
+  }
+  return y;
+}
+
+/**
+ * Expand metric samples into a dense ECG-style series.
+ * Baseline follows the real DB value; spikes give the heartbeat look.
+ */
+function buildHeartbeatSeries(rows, field, pointCount = 220){
+  if (!rows || !rows.length) return { wave: [], baselines: [], sampleIndex: [] };
+  const values = rows.map(r => Number(r[field] ?? 0));
+  const n = values.length;
+  const beats = Math.max(n, 8);
+  const wave = new Array(pointCount);
+  const baselines = new Array(pointCount);
+  const sampleIndex = new Array(pointCount);
+
+  for (let i = 0; i < pointCount; i++){
+    const u = i / Math.max(pointCount - 1, 1);          // 0..1 across chart
+    const beatPos = u * beats;
+    const beatIdx = Math.min(n - 1, Math.floor((u * (n - 1))));
+    const nextIdx = Math.min(n - 1, beatIdx + 1);
+    const localT = beatPos - Math.floor(beatPos);
+    const frac = (u * (n - 1)) - beatIdx;
+    const baseline = values[beatIdx] + (values[nextIdx] - values[beatIdx]) * Math.min(Math.max(frac, 0), 1);
+    // Spike amplitude scales with metric magnitude / typical full-scale
+    const amp = Math.max(Math.abs(baseline) * 0.12, 2.5);
+    const shape = ecgBeatShape(localT + scopeAnim.phase);
+    wave[i] = baseline + shape * amp;
+    baselines[i] = baseline;
+    sampleIndex[i] = beatIdx;
+  }
+  return { wave, baselines, sampleIndex, values };
+}
+
+/**
+ * Server Live Monitor: straight line segments between real samples (PLC / HMI style).
+ */
+function buildLineSeries(rows, field){
+  if (!rows || !rows.length) return { wave: [], baselines: [], sampleIndex: [], values: [] };
+  const values = rows.map(r => Number(r[field] ?? 0));
+  const sampleIndex = values.map((_, i) => i);
+  return { wave: values.slice(), baselines: values.slice(), sampleIndex, values };
+}
+
+/**
+ * Workbench Monitor: last N samples as column/bar values.
+ */
+function buildBarSeries(rows, field, maxBars = 16){
+  if (!rows || !rows.length) return { wave: [], baselines: [], sampleIndex: [], values: [], offset: 0 };
+  const offset = Math.max(0, rows.length - maxBars);
+  const slice = rows.slice(offset);
+  const values = slice.map(r => Number(r[field] ?? 0));
+  const sampleIndex = values.map((_, i) => offset + i);
+  return { wave: values.slice(), baselines: values.slice(), sampleIndex, values, offset };
+}
+
+function roundRectPath(ctx, x, y, w, h, r){
+  const rr = typeof r === 'number' ? [r, r, r, r] : r;
+  const [tl, tr, br, bl] = rr;
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + tr);
+  ctx.lineTo(x + w, y + h - br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+  ctx.lineTo(x + bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - bl);
+  ctx.lineTo(x, y + tl);
+  ctx.quadraticCurveTo(x, y, x + tl, y);
+  ctx.closePath();
+}
+
+function startScopeAnimation(){
+  if (scopeAnim.raf) return;
+  scopeAnim.lastTs = performance.now();
+  let lastDraw = 0;
+  const tick = (now) => {
+    scopeAnim.raf = requestAnimationFrame(tick);
+    const dt = Math.min(0.05, (now - scopeAnim.lastTs) / 1000);
+    scopeAnim.lastTs = now;
+    // ~0.85 beats/sec scroll — readable ECG crawl
+    scopeAnim.phase = (scopeAnim.phase + dt * 0.85) % 1;
+
+    if (!live) return;
+    // ~24 fps redraw is enough for a smooth ECG and lighter on CPU
+    if (now - lastDraw < 40) return;
+    lastDraw = now;
+
+    if (currentView === 'server'){
+      // PLC line charts redraw on poll — no ECG scroll animation needed
+      stopScopeAnimation();
+    } else {
+      stopScopeAnimation();
+    }
+  };
+  scopeAnim.raf = requestAnimationFrame(tick);
+}
+
+function stopScopeAnimation(){
+  if (scopeAnim.raf){
+    cancelAnimationFrame(scopeAnim.raf);
+    scopeAnim.raf = null;
+  }
+}
+
+function parseSampleTime(ts){
+  if (!ts) return null;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatRelativeAge(secondsAgo){
+  const s = Math.max(0, Math.round(secondsAgo));
+  if (s <= 2) return 'now';
+  if (s < 60) return `-${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  if (m < 60) return rem ? `-${m}m ${rem}s` : `-${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm ? `-${h}h ${rm}m` : `-${h}h`;
+}
+
+function formatClockTime(date){
+  if (!date) return '—';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function buildRelativeAxisLabels(rows){
+  if (!rows.length) return ['', '', '', '', 'now'];
+  const times = rows.map(r => parseSampleTime(r.timestamp)).filter(Boolean);
+  const newest = times.length ? times[times.length - 1] : new Date();
+  const oldest = times.length ? times[0] : newest;
+  const spanMs = Math.max(1, newest - oldest);
+  const marks = [0, 0.25, 0.5, 0.75, 1];
+  return marks.map((t, i) => {
+    if (i === marks.length - 1) return 'now';
+    const ageSec = ((1 - t) * spanMs) / 1000;
+    return formatRelativeAge(ageSec);
+  });
+}
+
+function metaKey(prefix, key){ return `${prefix}:${key}`; }
+
+function buildScopeShells(containerId = 'srv-scopes', prefix = 'scope'){
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const chartClass = prefix === 'wb' ? 'chart-bar' : 'chart-line';
+  const badge = prefix === 'wb' ? 'BARS' : 'PLC';
+  wrap.innerHTML = SCOPES.map(s => `
+    <div class="scope-wrap ${chartClass}" data-scope="${s.key}" data-prefix="${prefix}">
+      <div class="scope-head">
+        <span class="swatch" style="background:${s.color}"></span>
+        <span class="name">${s.label}</span>
+        <span class="now" id="${prefix}-now-${s.key}">--</span>
+        <span class="live"><span class="d"></span>${badge}</span>
+      </div>
+      <div class="scope-canvas-wrap">
+        <canvas class="scope" id="${prefix}-${s.key}" height="${prefix === 'wb' ? 168 : 150}"></canvas>
+        <div class="scope-tip" id="${prefix}-tip-${s.key}"></div>
+      </div>
+      <div class="scope-axis" id="${prefix}-axis-${s.key}">
+        <span></span><span></span><span></span><span></span><span>now</span>
+      </div>
+    </div>`).join('');
+
+  SCOPES.forEach(s => {
+    const canvas = document.getElementById(`${prefix}-${s.key}`);
+    if (!canvas) return;
+    canvas.onmousemove = (ev) => onScopeHover(s.key, ev, prefix);
+    canvas.onmouseleave = () => {
+      const tip = document.getElementById(`${prefix}-tip-${s.key}`);
+      if (tip) tip.classList.remove('show');
+      const meta = scopeDrawMeta[metaKey(prefix, s.key)];
+      if (meta){ meta.hoverIdx = null; drawScope(s, meta.rows, prefix); }
+    };
+  });
+}
+
+function onScopeHover(key, ev, prefix = 'scope'){
+  const meta = scopeDrawMeta[metaKey(prefix, key)];
+  const tip = document.getElementById(`${prefix}-tip-${key}`);
+  const scopeDef = SCOPES.find(s => s.key === key);
+  if (!meta || !tip || !scopeDef || !meta.rows || meta.rows.length < 1) return;
+
+  const rect = ev.target.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const { padL, padR, cssW, rows, wave, sampleIndex, chartType, barCenters } = meta;
+  const plotW = cssW - padL - padR;
+  if (plotW <= 0 || !wave?.length) return;
+
+  let widx;
+  if (chartType === 'bar' && barCenters?.length){
+    let best = 0, bestDist = Infinity;
+    barCenters.forEach((cx, i) => {
+      const d = Math.abs(cx - x);
+      if (d < bestDist){ bestDist = d; best = i; }
+    });
+    widx = best;
+  } else {
+    const t = clamp((x - padL) / plotW, 0, 1);
+    widx = Math.round(t * Math.max(wave.length - 1, 0));
+  }
+
+  const sidx = sampleIndex ? sampleIndex[widx] : widx;
+  const row = rows[Math.min(rows.length - 1, Math.max(0, sidx))];
+  if (!row) return;
+  const val = Number(row[scopeDef.field] ?? 0);
+  const when = parseSampleTime(row.timestamp);
+  const newest = parseSampleTime(rows[rows.length - 1].timestamp) || new Date();
+  const ageSec = when ? (newest - when) / 1000 : 0;
+
+  tip.innerHTML = `<b>${formatClockTime(when)}</b> · ${formatRelativeAge(ageSec)}<br>${scopeDef.label}: <b>${fmt1(val)}${scopeDef.unit}</b>`;
+  tip.classList.add('show');
+  tip.style.left = Math.min(Math.max(8, x + 10), rect.width - 140) + 'px';
+
+  if (meta.hoverIdx !== widx){
+    meta.hoverIdx = widx;
+    drawScope(scopeDef, rows, prefix);
+  }
+}
+
+function appendHeartbeat(bufMap, server, latest){
+  if (!latest) return;
+  if (!bufMap[server]) bufMap[server] = [];
+  const buf = bufMap[server];
+  const last = buf[buf.length - 1];
+  const sameTs = last && last.timestamp && last.timestamp === latest.timestamp;
+  if (!sameTs){
+    buf.push({ ...latest });
+    while (buf.length > HEARTBEAT_MAX) buf.shift();
+  } else if (buf.length === 0){
+    buf.push({ ...latest });
+  }
+}
+
+async function pullHistory(){
+  try{
+    const rows = await api(`/api/history?server=${currentServer}&limit=60`);
+    scopeBuffers[currentServer] = rows;
+    const latest = rows.length ? rows[rows.length - 1] : null;
+    appendHeartbeat(heartbeatTrace, currentServer, latest);
+    const drawRows = (heartbeatTrace[currentServer] && heartbeatTrace[currentServer].length >= 2)
+      ? heartbeatTrace[currentServer]
+      : rows;
+    drawAllScopes(drawRows, 'scope');
+  }catch(e){ /* keep last drawn frame */ }
+}
+
+function drawAllScopes(rows, prefix = 'scope'){
+  SCOPES.forEach(s => drawScope(s, rows, prefix));
+}
+
+function drawScope(scopeDef, rows, prefix = 'scope'){
+  const canvas = document.getElementById(`${prefix}-${scopeDef.key}`);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 280;
+  const isBar = prefix === 'wb';
+  const cssH = isBar ? 176 : 168;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Dark embedded instrument face
+  const face = ctx.createLinearGradient(0, 0, 0, cssH);
+  face.addColorStop(0, 'rgba(4,12,22,.95)');
+  face.addColorStop(1, 'rgba(2,8,14,.98)');
+  ctx.fillStyle = face;
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  if (!rows || !rows.length){
+    ctx.fillStyle = '#6f91aa'; ctx.font = '300 11px Exo 2, Inter, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('collecting samples…', 14, cssH / 2);
+    return;
+  }
+
+  if (isBar) drawBarChart(ctx, scopeDef, rows, prefix, cssW, cssH);
+  else drawPlcLineChart(ctx, scopeDef, rows, prefix, cssW, cssH);
+}
+
+function scopeNeonColor(scopeDef){
+  const map = { cpu:'#33e0ff', ram:'#b78bff', disk:'#ffd166', temperature:'#ff9f5a', latency:'#54e6a8' };
+  return map[scopeDef.key] || '#33e0ff';
+}
+
+/** Dark SCADA line: neon stroke, area fill, live callout, hover crosshair. */
+function drawPlcLineChart(ctx, scopeDef, rows, prefix, cssW, cssH){
+  const series = buildLineSeries(rows, scopeDef.field);
+  const values = series.values;
+  const wave = series.wave;
+  const now = values[values.length - 1] ?? 0;
+  const neon = scopeNeonColor(scopeDef);
+  const nowEl = document.getElementById(`${prefix}-now-${scopeDef.key}`);
+  if (nowEl){
+    nowEl.textContent = fmt1(now) + scopeDef.unit;
+    nowEl.style.color = neon;
+  }
+
+  const padL = 10, padR = 58, padT = 14, padB = 10;
+  const vmin = Math.min(...values);
+  const vmax = Math.max(...values);
+  const span = Math.max(vmax - vmin, 4);
+  let lo = Math.max(scopeDef.min, vmin - span * 0.12);
+  let hi = Math.min(scopeDef.max * 1.15, vmax + span * 0.12);
+  if (hi - lo < 6){ lo = Math.max(scopeDef.min, now - 3); hi = lo + 6; }
+
+  const plotH = cssH - padT - padB;
+  const plotW = cssW - padL - padR;
+  const xFor = idx => padL + (idx / Math.max(wave.length - 1, 1)) * plotW;
+  const yFor = v => padT + (1 - ((v - lo) / (hi - lo))) * plotH;
+
+  ctx.strokeStyle = 'rgba(61,224,255,.1)';
+  ctx.lineWidth = 1;
+  for (let gy = 0; gy <= 4; gy++){
+    const y = padT + plotH * (gy / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#6f91aa';
+  ctx.font = '300 9px JetBrains Mono, ui-monospace, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  [hi, (hi + lo) / 2, lo].forEach((v, i) => {
+    ctx.fillText(fmt1(v), cssW - padR + 6, padT + plotH * (i / 2));
+  });
+
+  const axisEl = document.getElementById(`${prefix}-axis-${scopeDef.key}`);
+  if (axisEl){
+    axisEl.innerHTML = buildRelativeAxisLabels(rows).map(lbl => `<span>${lbl}</span>`).join('');
+  }
+
+  const mkey = metaKey(prefix, scopeDef.key);
+  const prevHover = scopeDrawMeta[mkey]?.hoverIdx ?? null;
+  scopeDrawMeta[mkey] = {
+    rows, values, wave, sampleIndex: series.sampleIndex, chartType: 'line',
+    lo, hi, padL, padR, padT, padB, cssW, cssH, hoverIdx: prevHover, prefix,
+  };
+
+  // Area fill under curve
+  ctx.beginPath();
+  wave.forEach((v, idx) => {
+    const x = xFor(idx), y = yFor(v);
+    idx === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(xFor(wave.length - 1), padT + plotH);
+  ctx.lineTo(xFor(0), padT + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+  grad.addColorStop(0, neon + '55');
+  grad.addColorStop(1, neon + '00');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Neon line
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  wave.forEach((v, idx) => {
+    const x = xFor(idx), y = yFor(v);
+    idx === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Latest value callout
+  const hx = xFor(wave.length - 1);
+  const hy = yFor(now);
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(cssW - padR + 2, hy); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  const label = fmt1(now);
+  ctx.font = '300 10px JetBrains Mono, ui-monospace, monospace';
+  const tw = ctx.measureText(label).width;
+  const bx = cssW - padR + 4;
+  const by = hy - 9;
+  const bw = tw + 10, bh = 18;
+  ctx.fillStyle = 'rgba(4,12,22,.92)';
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  roundRectPath(ctx, bx, by, bw, bh, 3);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = neon;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, bx + 5, by + bh / 2);
+
+  // live endpoint glow
+  ctx.fillStyle = neon;
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(hx, hy, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  if (prevHover !== null && prevHover >= 0 && prevHover < wave.length){
+    const cx = xFor(prevHover), cy = yFor(wave[prevHover]);
+    ctx.strokeStyle = 'rgba(61,224,255,.45)';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, cssH - padB); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, cy, 3.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = neon;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, 3.6, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+/** Dark SCADA bars with neon fills and hover marker. */
+function drawBarChart(ctx, scopeDef, rows, prefix, cssW, cssH){
+  const maxBars = Math.max(8, Math.min(16, Math.floor((cssW - 40) / 22)));
+  const series = buildBarSeries(rows, scopeDef.field, maxBars);
+  const values = series.values;
+  const wave = series.wave;
+  const now = values[values.length - 1] ?? 0;
+  const neon = scopeNeonColor(scopeDef);
+  const nowEl = document.getElementById(`${prefix}-now-${scopeDef.key}`);
+  if (nowEl){
+    nowEl.textContent = fmt1(now) + scopeDef.unit;
+    nowEl.style.color = neon;
+  }
+
+  const padL = 36, padR = 10, padT = 22, padB = 8;
+  const vmax = Math.max(...values, 1);
+  let lo = 0;
+  let hi = Math.max(scopeDef.max * 0.35, vmax * 1.18);
+  if (hi < 8) hi = 8;
+
+  const plotH = cssH - padT - padB;
+  const plotW = cssW - padL - padR;
+  const n = Math.max(wave.length, 1);
+  const gap = Math.max(3, plotW / n * 0.22);
+  const barW = Math.max(6, (plotW / n) - gap);
+  const yFor = v => padT + (1 - ((v - lo) / (hi - lo))) * plotH;
+  const xCenter = i => padL + (i + 0.5) * (plotW / n);
+
+  ctx.strokeStyle = 'rgba(61,224,255,.1)';
+  ctx.lineWidth = 1;
+  for (let gy = 0; gy <= 4; gy++){
+    const y = padT + plotH * (gy / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#6f91aa';
+  ctx.font = '300 9px JetBrains Mono, ui-monospace, monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [hi, hi * 0.75, hi * 0.5, hi * 0.25, lo].forEach((v, i) => {
+    ctx.fillText(fmt1(v), padL - 4, padT + plotH * (i / 4));
+  });
+
+  const axisRows = rows.slice(series.offset);
+  const axisEl = document.getElementById(`${prefix}-axis-${scopeDef.key}`);
+  if (axisEl){
+    axisEl.innerHTML = buildRelativeAxisLabels(axisRows).map(lbl => `<span>${lbl}</span>`).join('');
+  }
+
+  const mkey = metaKey(prefix, scopeDef.key);
+  const prevHover = scopeDrawMeta[mkey]?.hoverIdx ?? null;
+  scopeDrawMeta[mkey] = {
+    rows, values, wave, sampleIndex: series.sampleIndex, chartType: 'bar',
+    lo, hi, padL, padR, padT, padB, cssW, cssH, hoverIdx: prevHover, prefix,
+    barCenters: wave.map((_, i) => xCenter(i)),
+  };
+
+  const showEvery = n > 12 ? 2 : 1;
+
+  wave.forEach((v, i) => {
+    const cx = xCenter(i);
+    const top = yFor(v);
+    const base = cssH - padB;
+    const x = cx - barW / 2;
+    const g = ctx.createLinearGradient(0, top, 0, base);
+    g.addColorStop(0, neon);
+    g.addColorStop(1, neon + '44');
+    ctx.fillStyle = g;
+    ctx.shadowColor = neon;
+    ctx.shadowBlur = i === n - 1 ? 10 : 0;
+    ctx.beginPath();
+    roundRectPath(ctx, x, top, barW, Math.max(1, base - top), [3, 3, 0, 0]);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    if (i % showEvery === 0 || i === n - 1){
+      const label = fmt1(v);
+      ctx.font = '300 8.5px JetBrains Mono, ui-monospace, monospace';
+      const tw = ctx.measureText(label).width;
+      const lw = tw + 8, lh = 14;
+      const lx = cx - lw / 2;
+      const ly = Math.max(2, top - lh - 3);
+      ctx.fillStyle = 'rgba(4,12,22,.9)';
+      ctx.strokeStyle = neon + '88';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      roundRectPath(ctx, lx, ly, lw, lh, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = neon;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, cx, ly + lh / 2);
+    }
+  });
+
+  if (prevHover !== null && prevHover >= 0 && prevHover < wave.length){
+    const cx = xCenter(prevHover);
+    ctx.strokeStyle = 'rgba(61,224,255,.5)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, cssH - padB); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+/* ============================================================
+   WORKBENCH MONITOR  (ServerMonitoringHistory)
+   ============================================================ */
+async function pullWorkbenchMonitor(forceShells){
+  if (forceShells) buildScopeShells('wbmon-scopes', 'wb');
+  try{
+    const data = await api(`/api/workbench-monitor?server=${wbMonServer}&limit=60`);
+    lastWbMonitor = data;
+    lastStateAt = Date.now();
+    renderWorkbenchMonitor(data);
+  }catch(e){
+    const meta = document.getElementById('wbmon-meta');
+    if (meta) meta.textContent = 'load failed: ' + e.message;
+  }
+}
+
+function renderWorkbenchMonitor(data){
+  const rows = data.history || [];
+  const latest = data.latest || data.live_values || null;
+  const live = data.live_values;
+
+  const meta = document.getElementById('wbmon-meta');
+  if (meta){
+    const sum = (data.servers_summary || []).find(s => s.server === wbMonServer);
+    meta.textContent = `${data.sample_count || 0} samples · table ${data.table || 'ServerMonitoringHistory'}`
+      + (sum ? ` · ${sum.row_count} total rows` : '');
+  }
+
+  const note = document.getElementById('wbmon-note');
+  if (note){
+    const sum = data.servers_summary || [];
+    const emptyServers = [1,2,3,4].filter(n => !sum.some(s => s.server === n && s.row_count > 0));
+    note.textContent = emptyServers.length
+      ? `Graphs read ServerMonitoringHistory every 45s. No history rows yet for server(s) ${emptyServers.join(', ')} — charts use ServerMonitoringValues overlay when available.`
+      : 'Graphs read updated values from ServerMonitoringHistory every 45s. Newest point is aligned with ServerMonitoringValues when history CPU is zero.';
+  }
+
+  const hint = document.getElementById('wbmon-latest-hint');
+  if (hint){
+    hint.textContent = live?.updated_at
+      ? `live overlay ${live.updated_at}`
+      : (latest?.timestamp ? `history ${latest.timestamp}` : 'waiting for data');
+  }
+
+  const kpis = document.getElementById('wbmon-kpis');
+  if (kpis){
+    const src = latest || live || {};
+    const cards = [
+      ['CPU', src.cpu, '%', 'cpu'],
+      ['RAM', src.ram, '%', 'ram'],
+      ['Disk', src.disk, '%', 'disk'],
+      ['Temp', src.temperature, '°C', 'temperature'],
+      ['Network', src.network, 'Mbps', 'network'],
+      ['Latency', src.latency, 'ms', 'latency'],
+      ['Status', src.status ? 'UP' : 'DOWN', '', 'status'],
+      ['Samples', data.sample_count ?? 0, '', 'info'],
+    ];
+    kpis.innerHTML = cards.map(([lbl, val, unit, kind]) => {
+      let cls = 'stat info';
+      if (kind === 'status') cls = src.status ? 'stat ok' : 'stat crit';
+      else if (kind === 'cpu') cls = 'stat ' + classify(Number(val||0), THRESHOLDS.cpu_warning, THRESHOLDS.cpu_critical);
+      else if (kind === 'temperature') cls = 'stat ' + classify(Number(val||0), THRESHOLDS.temp_warning, THRESHOLDS.temp_critical);
+      const display = (kind === 'status' || kind === 'info') ? val : `${fmt1(val)}<span class="unit">${unit}</span>`;
+      return `<div class="${cls}"><div class="lbl">${lbl}</div><div class="val">${display}</div></div>`;
+    }).join('');
+  }
+
+  const latestPoint = rows.length ? rows[rows.length - 1] : (live ? {
+    timestamp: live.updated_at || new Date().toISOString(),
+    cpu: live.cpu, ram: live.ram, disk: live.disk, temperature: live.temperature,
+    network: live.network, latency: live.latency, status: live.status,
+  } : null);
+  appendHeartbeat(wbHeartbeatTrace, wbMonServer, latestPoint);
+  // Prefer full SQL history series when available; otherwise walking buffer
+  const drawRows = rows.length >= 2
+    ? rows
+    : ((wbHeartbeatTrace[wbMonServer] && wbHeartbeatTrace[wbMonServer].length >= 2)
+      ? wbHeartbeatTrace[wbMonServer]
+      : rows);
+  drawAllScopes(drawRows, 'wb');
+
+  const body = document.getElementById('wbmon-sql-body');
+  const tableHint = document.getElementById('wbmon-table-hint');
+  if (tableHint) tableHint.textContent = `Server ${wbMonServer} · newest first · ${rows.length} shown`;
+  if (body){
+    if (!rows.length){
+      body.innerHTML = '<tr><td colspan="8" class="loading-inline">No ServerMonitoringHistory rows for this server yet.</td></tr>';
+    } else {
+      body.innerHTML = rows.slice().reverse().slice(0, 40).map(r => `
+        <tr>
+          <td class="mono">${r.timestamp || '—'}</td>
+          <td class="mono">${fmt1(r.cpu)}</td>
+          <td class="mono">${fmt1(r.ram)}</td>
+          <td class="mono">${fmt1(r.disk)}</td>
+          <td class="mono">${fmt1(r.temperature)}</td>
+          <td class="mono">${fmt1(r.network)}</td>
+          <td class="mono">${fmt1(r.latency)}</td>
+          <td>${r.status ? 'UP' : 'DOWN'}</td>
+        </tr>`).join('');
+    }
+  }
+}
+
+$$('#wbmon-server-filter .fchip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#wbmon-server-filter .fchip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    wbMonServer = parseInt(btn.dataset.server, 10);
+    pullWorkbenchMonitor(true);
+  });
+});
+document.getElementById('wbmon-refresh')?.addEventListener('click', () => pullWorkbenchMonitor(true));
+
+function getCss(varOrColor){
+  if (!varOrColor.startsWith('var(')) return varOrColor;
+  const name = varOrColor.slice(4,-1);
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ---- lightweight CPU trend sparklines for overview/summary cards ----
+   Reuses the /api/state poll that's already running — no extra network calls. */
+const sparkBuffers = { 1:[], 2:[], 3:[], 4:[] };
+const SPARK_LEN = 40;
+function pushSpark(tags){
+  for (let i=1; i<=4; i++){
+    const buf = sparkBuffers[i];
+    buf.push(tags[`Server${i}_CPU_Percent`] ?? 0);
+    if (buf.length > SPARK_LEN) buf.shift();
+  }
+}
+function drawSpark(canvas, values){
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 100;
+  const cssH = 28;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,cssW,cssH);
+  if (values.length < 2) return;
+  const lo = Math.min(...values, 0), hi = Math.max(...values, 20) * 1.1;
+  const n = values.length;
+  const xFor = idx => (idx/(n-1)) * cssW;
+  const yFor = v => cssH - ((v - lo) / Math.max(1, hi - lo)) * cssH;
+  const color = getCss('var(--accent)');
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  values.forEach((v,idx) => { const x=xFor(idx), y=yFor(v); idx===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  const grad = ctx.createLinearGradient(0,0,0,cssH);
+  grad.addColorStop(0, color+'33'); grad.addColorStop(1, color+'00');
+  ctx.fillStyle = grad;
+  ctx.lineTo(xFor(n-1), cssH); ctx.lineTo(xFor(0), cssH); ctx.closePath(); ctx.fill();
+}
+function drawAllSparks(){
+  for (let i=1;i<=4;i++){
+    document.querySelectorAll(`.spark[data-server="${i}"]`).forEach(c => drawSpark(c, sparkBuffers[i]));
+  }
+}
+
+/* ============================================================
+   AI ANALYTICS
+   ============================================================ */
+async function pullAnalytics(force){
+  try{
+    const a = await api('/api/analytics');
+    renderAnalytics(a);
+  }catch(e){
+    document.getElementById('ai-recs').innerHTML = `<div class="loading-inline">Could not load analytics: ${e.message}</div>`;
+  }
+  clearInterval(analyticsTimer);
+  if (currentView === 'ai' && live) analyticsTimer = setInterval(async ()=>{ try{ renderAnalytics(await api('/api/analytics')); }catch(e){} }, 5000);
+}
+
+function renderAnalytics(a){
+  document.getElementById('ai-health').textContent = a.system.health_score.toFixed(1) + '/100';
+  const riskEl = document.getElementById('ai-risk');
+  riskEl.textContent = `${a.system.risk_label} (${a.system.risk_score})`;
+  document.getElementById('ai-risk-card').className = 'stat ' + (a.system.risk_score>=60?'crit':a.system.risk_score>=35?'warn':'ok');
+  document.getElementById('ai-crit').textContent = a.system.critical_recommendations;
+  document.getElementById('ai-high').textContent = a.system.high_recommendations;
+
+  document.getElementById('ai-server-kpis').innerHTML = a.server_kpis.map(s => `
+    <div class="ai-kpi-card">
+      <div class="top">
+        <h4>Server ${s.server}</h4>
+        <span class="score" style="color:${s.health_score>=85?'var(--ok)':s.health_score>=65?'var(--accent)':s.health_score>=40?'var(--warn)':'var(--crit)'}">${s.health_score}</span>
+      </div>
+      <div class="sub">${s.health_label} · Headroom ${s.capacity_headroom}% · Risk ${s.risk_score}/100 · ${s.status?'Online':'Offline'}</div>
+      <div class="kpi-rows" style="margin-bottom:10px;">
+        <div class="r">CPU <b>${fmt1(s.cpu)}%</b></div>
+        <div class="r">RAM <b>${fmt1(s.ram)}%</b></div>
+        <div class="r">Disk <b>${fmt1(s.disk)}%</b></div>
+        <div class="r">Temp <b>${fmt1(s.temperature)}°C</b></div>
+        <div class="r">Network <b>${fmt1(s.network)} Mbps</b></div>
+        <div class="r">Latency <b>${fmt1(s.latency)} ms</b></div>
+      </div>
+      <div class="statechips">
+        <span class="statechip ${chipClass(s.cpu_state)}">CPU ${s.cpu_state}</span>
+        <span class="statechip ${chipClass(s.ram_state)}">RAM ${s.ram_state}</span>
+        <span class="statechip ${chipClass(s.disk_state)}">Disk ${s.disk_state}</span>
+        <span class="statechip ${chipClass(s.thermal_state)}">Temp ${s.thermal_state}</span>
+        <span class="statechip ${chipClass(s.latency_state)}">Latency ${s.latency_state}</span>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('ai-challenges').innerHTML = a.challenges.map(c => `
+    <div class="status-card">
+      <div class="ic" style="background:${c.active?'var(--crit-soft)':'var(--panel-2)'}">${c.active?'▲':'○'}</div>
+      <div><b>${c.name}</b><div class="state ${c.active?'crit':'ok'}">${c.active?'Active':'Monitored'}</div><p>${c.description}</p></div>
+    </div>`).join('');
+
+  document.getElementById('ai-recs').innerHTML = a.recommendations.map(r => `
+    <div class="rec-item ${r.priority}">
+      <div class="top"><span class="pr">${r.priority}</span><span class="prob">${r.server?('Server '+r.server+' — '):''}${r.problem}</span></div>
+      <div class="ev">${r.evidence}</div>
+      <div class="act"><b>Action:</b> ${r.recommended_action}</div>
+      <div class="meta">Sources: ${r.source_ids.join(', ')} · Confidence ${r.confidence}%</div>
+    </div>`).join('');
+
+  document.getElementById('ai-sources').innerHTML = a.sources.map(s => `
+    <div class="source-row"><b>${s.organization}</b> — ${s.title} (${s.year}). ${s.supports}</div>`).join('');
+}
+
+/* ============================================================
+   TOP LEVEL MANAGEMENT  (executive CEO dashboard)
+   ============================================================ */
+const TLM_COLORS = ['#ff8a3d', '#3de0ff', '#ff4d9a', '#54e6a8', '#ffd166', '#ff5a5a'];
+
+function tlmCssColor(name, fallback){
+  const root = document.getElementById('view-summary') || document.documentElement;
+  const v = getComputedStyle(root).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+function tlmIsScada(){ return document.body.classList.contains('tlm-scada'); }
+
+function tlmFitCanvas(canvas){
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = Math.max(220, wrap?.clientWidth || canvas.clientWidth || 280);
+  const cssH = Math.max(200, wrap?.clientHeight || 240);
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, cssW, cssH };
+}
+
+function drawPieChart(canvasId, slices, legendId, centerLabel){
+  const canvas = document.getElementById(canvasId);
+  const legend = document.getElementById(legendId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = tlmFitCanvas(canvas);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const data = (slices || []).filter(s => Number(s.value) > 0);
+  const total = data.reduce((a, s) => a + Number(s.value || 0), 0);
+  const scada = tlmIsScada();
+  if (!total){
+    ctx.fillStyle = scada ? '#6f91aa' : '#8a9bb0';
+    ctx.font = '700 16px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('No data yet', cssW / 2, cssH / 2);
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+
+  const cx = cssW / 2;
+  const cy = cssH / 2;
+  const r = Math.min(cssW, cssH) * 0.42;
+  const centerText = String(Math.round(total * 10) / 10);
+  const digitScale = centerText.length >= 5 ? 0.78 : centerText.length >= 4 ? 0.88 : 1;
+  const centerSize = Math.max(26, Math.round(r * 0.36 * digitScale));
+  const labelSize = Math.max(14, Math.round(r * 0.16));
+  const sliceSize = Math.max(16, Math.round(r * 0.2));
+  let angle = -Math.PI / 2;
+
+  data.forEach((s, i) => {
+    const slice = (Number(s.value) / total) * Math.PI * 2;
+    const color = s.color || TLM_COLORS[i % TLM_COLORS.length];
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angle, angle + slice);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = scada ? 14 : 0;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const pct = (Number(s.value) / total) * 100;
+    if (pct >= 8){
+      const mid = angle + slice / 2;
+      const lx = cx + Math.cos(mid) * r * 0.72;
+      const ly = cy + Math.sin(mid) * r * 0.72;
+      ctx.fillStyle = '#fff';
+      ctx.font = `700 ${sliceSize}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(pct) + '%', lx, ly);
+    }
+    angle += slice;
+  });
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.52, 0, Math.PI * 2);
+  ctx.fillStyle = scada ? 'rgba(6,14,24,.92)' : tlmCssColor('--panel', '#ffffff');
+  ctx.fill();
+  ctx.fillStyle = scada ? '#ff8a3d' : tlmCssColor('--text', '#1d2a36');
+  ctx.font = `700 ${centerSize}px Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (scada){ ctx.shadowColor = 'rgba(255,138,61,.55)'; ctx.shadowBlur = 14; }
+  ctx.fillText(centerText, cx, cy - Math.round(labelSize * 0.55));
+  ctx.shadowBlur = 0;
+  ctx.font = `700 ${labelSize}px Inter, sans-serif`;
+  ctx.fillStyle = scada ? '#9ad0ea' : '#7a8fa3';
+  ctx.fillText(centerLabel || 'total', cx, cy + Math.round(centerSize * 0.38));
+
+  if (legend){
+    legend.innerHTML = data.map((s, i) => {
+      const c = s.color || TLM_COLORS[i % TLM_COLORS.length];
+      const pct = ((Number(s.value) / total) * 100).toFixed(0);
+      return `<span><span style="display:inline-flex;align-items:center;gap:8px;"><i style="background:${c};color:${c}"></i>${s.label}</span><b>${fmt1(s.value)} · ${pct}%</b></span>`;
+    }).join('');
+  }
+}
+
+function drawMonthlyBars(canvasId, months){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = tlmFitCanvas(canvas);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const rows = months || [];
+  const scada = tlmIsScada();
+  if (!rows.length){
+    ctx.fillStyle = scada ? '#6f91aa' : '#8a9bb0';
+    ctx.font = '300 13px Exo 2, Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('No monthly history yet', cssW / 2, cssH / 2);
+    return;
+  }
+
+  const padL = 44, padR = 18, padT = 36, padB = 42;
+  const plotW = cssW - padL - padR;
+  const plotH = cssH - padT - padB;
+  const scores = rows.map(r => Number(r.performance_score || 0));
+  const cpus = rows.map(r => Number(r.avg_cpu || 0));
+  const hi = Math.max(100, ...scores, ...cpus, 1);
+  const n = rows.length;
+  const gap = plotW / n;
+  const barW = Math.max(12, Math.min(36, gap * 0.62));
+
+  ctx.fillStyle = scada ? 'rgba(8,20,34,.45)' : tlmCssColor('--panel-2', 'rgba(120,140,160,.06)');
+  ctx.fillRect(padL, padT, plotW, plotH);
+
+  ctx.strokeStyle = scada ? 'rgba(61,224,255,.14)' : 'rgba(120,140,160,.22)';
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++){
+    const y = padT + plotH * (g / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+    ctx.fillStyle = scada ? '#6f91aa' : '#7a8fa3';
+    ctx.font = '300 10px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(Math.round(hi * (1 - g / 4))), padL - 8, y);
+  }
+
+  rows.forEach((r, i) => {
+    const score = Number(r.performance_score || 0);
+    const x = padL + i * gap + gap / 2;
+    const h = (score / hi) * plotH;
+    const y = padT + plotH - h;
+    const grad = ctx.createLinearGradient(0, y, 0, padT + plotH);
+    grad.addColorStop(0, '#ffb070');
+    grad.addColorStop(1, '#ff8a3d');
+    ctx.fillStyle = grad;
+    if (scada){ ctx.shadowColor = 'rgba(255,138,61,.45)'; ctx.shadowBlur = 12; }
+    roundRectPath(ctx, x - barW / 2, y, barW, Math.max(2, h), [4, 4, 0, 0]);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = scada ? '#ffd4b0' : tlmCssColor('--text', '#1d2a36');
+    ctx.font = scada ? '300 10px JetBrains Mono, monospace' : 'bold 10px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(fmt1(score), x, y - 4);
+  });
+
+  // CPU line — neon cyan
+  ctx.beginPath();
+  rows.forEach((r, i) => {
+    const cpu = Number(r.avg_cpu || 0);
+    const x = padL + i * gap + gap / 2;
+    const cy = padT + plotH - (cpu / hi) * plotH;
+    i === 0 ? ctx.moveTo(x, cy) : ctx.lineTo(x, cy);
+  });
+  ctx.strokeStyle = '#3de0ff';
+  ctx.lineWidth = scada ? 1.8 : 2.5;
+  ctx.lineJoin = 'round';
+  if (scada){ ctx.shadowColor = 'rgba(61,224,255,.55)'; ctx.shadowBlur = 10; }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  rows.forEach((r, i) => {
+    const cpu = Number(r.avg_cpu || 0);
+    const x = padL + i * gap + gap / 2;
+    const cy = padT + plotH - (cpu / hi) * plotH;
+    ctx.fillStyle = '#0a1420';
+    ctx.beginPath(); ctx.arc(x, cy, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#3de0ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, cy, 3.5, 0, Math.PI * 2); ctx.stroke();
+  });
+
+  ctx.fillStyle = scada ? '#6f91aa' : '#6a7f93';
+  ctx.font = '300 11px Exo 2, Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  rows.forEach((r, i) => {
+    const x = padL + i * gap + gap / 2;
+    ctx.fillText(String(r.label || ''), x, cssH - 28);
+  });
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ff8a3d';
+  roundRectPath(ctx, padL, 12, 12, 12, 2); ctx.fill();
+  ctx.fillStyle = scada ? '#8eb0c8' : tlmCssColor('--text-dim', '#6a7f93');
+  ctx.font = '300 11px Exo 2, Inter, sans-serif';
+  ctx.fillText('Performance score (higher = better)', padL + 18, 18);
+  ctx.fillStyle = '#3de0ff';
+  ctx.fillRect(padL + 250, 16, 16, 2);
+  ctx.beginPath(); ctx.arc(padL + 258, 17, 2.8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = scada ? '#8eb0c8' : tlmCssColor('--text-dim', '#6a7f93');
+  ctx.fillText('Avg CPU %', padL + 272, 18);
+}
+
+let lastExecutive = null;
+let tlmAlarmRange = '24h';
+
+function renderRiskHeatmap(rows){
+  const table = document.getElementById('tlm-heatmap');
+  if (!table) return;
+  const metrics = (rows?.[0]?.cells || []).map(c => c.label);
+  if (!rows?.length){
+    table.innerHTML = '<tr><td class="loading-inline">No heatmap data</td></tr>';
+    return;
+  }
+  const head = `<tr><th class="rowlbl">Server</th>${metrics.map(m => `<th>${m}</th>`).join('')}</tr>`;
+  const body = rows.map(r => `
+    <tr>
+      <td class="srv">${r.label}${r.status ? '' : ' · DOWN'}</td>
+      ${(r.cells || []).map(c => `
+        <td class="${c.level}" title="${c.label}: ${fmt1(c.value)}${c.unit} (warn ${c.warn}, crit ${c.crit})">
+          ${fmt1(c.value)}<span class="u">${c.unit}</span>
+        </td>`).join('')}
+    </tr>`).join('');
+  table.innerHTML = head + body;
+}
+
+function drawHeadroomGauge(canvas, pct, color){
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = 110, cssH = 70;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = cssW / 2, cy = cssH - 8, r = 48;
+  const start = Math.PI, end = 2 * Math.PI;
+  ctx.strokeStyle = 'rgba(61,224,255,.16)';
+  ctx.lineWidth = 8; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(cx, cy, r, start, end); ctx.stroke();
+  const fillTo = start + (Math.max(0, Math.min(100, pct)) / 100) * Math.PI;
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.arc(cx, cy, r, start, fillTo); ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function renderCapacityHeadroom(payload){
+  const wrap = document.getElementById('tlm-gauges');
+  if (!wrap) return;
+  const servers = payload?.servers || [];
+  const fleet = Number(payload?.fleet_overall_headroom ?? 0);
+  const colorFor = (v) => v >= 40 ? '#54e6a8' : v >= 15 ? '#ffd166' : '#ff5a5a';
+
+  const all = [
+    { title: 'Fleet overall', value: fleet, sub: 'safer when higher' },
+    ...servers.map(s => ({
+      title: s.label,
+      value: Number(s.overall_headroom || 0),
+      sub: s.status ? `CPU room ${fmt1(s.cpu_headroom)}%` : 'offline — no headroom',
+    })),
+  ].slice(0, 5);
+
+  wrap.innerHTML = all.map((g, i) => `
+    <div class="tlm-gauge">
+      <div class="g-title">${g.title}</div>
+      <canvas id="tlm-gauge-${i}"></canvas>
+      <div class="g-val" style="color:${colorFor(g.value)}">${fmt1(g.value)}%</div>
+      <div class="g-sub">${g.sub}</div>
+    </div>`).join('');
+
+  all.forEach((g, i) => {
+    drawHeadroomGauge(document.getElementById(`tlm-gauge-${i}`), g.value, colorFor(g.value));
+  });
+}
+
+function drawAlarmTrend(canvasId, series){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = tlmFitCanvas(canvas);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const rows = series || [];
+  const scada = tlmIsScada();
+  if (!rows.length){
+    ctx.fillStyle = scada ? '#6f91aa' : '#8a9bb0';
+    ctx.font = '300 13px Exo 2, Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('No alarm events in this period', cssW / 2, cssH / 2);
+    return;
+  }
+  const padL = 40, padR = 16, padT = 36, padB = 40;
+  const plotW = cssW - padL - padR;
+  const plotH = cssH - padT - padB;
+  const maxY = Math.max(1, ...rows.map(r => Number(r.active || 0) + Number(r.cleared || 0)));
+  const n = rows.length;
+  const gap = plotW / n;
+  const barW = Math.max(6, Math.min(28, gap * 0.55));
+
+  ctx.fillStyle = scada ? 'rgba(8,20,34,.45)' : tlmCssColor('--panel-2', 'rgba(120,140,160,.06)');
+  ctx.fillRect(padL, padT, plotW, plotH);
+
+  ctx.strokeStyle = scada ? 'rgba(61,224,255,.14)' : 'rgba(120,140,160,.2)';
+  for (let g = 0; g <= 4; g++){
+    const y = padT + plotH * (g / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+    ctx.fillStyle = scada ? '#6f91aa' : '#7a8fa3';
+    ctx.font = '300 10px JetBrains Mono, monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(Math.round(maxY * (1 - g / 4))), padL - 8, y);
+  }
+
+  rows.forEach((r, i) => {
+    const active = Number(r.active || 0);
+    const cleared = Number(r.cleared || 0);
+    const x = padL + i * gap + gap / 2;
+    const hActive = (active / maxY) * plotH;
+    const hCleared = (cleared / maxY) * plotH;
+    const base = padT + plotH;
+    ctx.fillStyle = '#54e6a8';
+    if (scada){ ctx.shadowColor = 'rgba(84,230,168,.35)'; ctx.shadowBlur = 6; }
+    ctx.fillRect(x - barW / 2, base - hCleared, barW, Math.max(0, hCleared));
+    ctx.fillStyle = '#ff5a5a';
+    if (scada){ ctx.shadowColor = 'rgba(255,90,90,.4)'; ctx.shadowBlur = 6; }
+    ctx.fillRect(x - barW / 2, base - hCleared - hActive, barW, Math.max(0, hActive));
+    ctx.shadowBlur = 0;
+  });
+
+  ctx.fillStyle = scada ? '#6f91aa' : '#6a7f93';
+  ctx.font = '300 10px Exo 2, Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const step = n > 14 ? Math.ceil(n / 8) : 1;
+  rows.forEach((r, i) => {
+    if (i % step !== 0 && i !== n - 1) return;
+    const x = padL + i * gap + gap / 2;
+    ctx.fillText(String(r.label || ''), x, cssH - 28);
+  });
+
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ff5a5a'; ctx.fillRect(padL, 12, 12, 12);
+  ctx.fillStyle = scada ? '#8eb0c8' : tlmCssColor('--text-dim', '#6a7f93');
+  ctx.font = '300 11px Exo 2, Inter, sans-serif';
+  ctx.fillText('Active alarms', padL + 18, 18);
+  ctx.fillStyle = '#54e6a8'; ctx.fillRect(padL + 130, 12, 12, 12);
+  ctx.fillStyle = scada ? '#8eb0c8' : tlmCssColor('--text-dim', '#6a7f93');
+  ctx.fillText('Cleared / recovery', padL + 148, 18);
+}
+
+function bindAlarmRangeToggle(){
+  const wrap = document.getElementById('tlm-alarm-range');
+  if (!wrap || wrap.dataset.bound) return;
+  wrap.dataset.bound = '1';
+  wrap.querySelectorAll('.fchip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.fchip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      tlmAlarmRange = btn.dataset.range || '24h';
+      if (lastExecutive) renderAlarmTrendFromExec(lastExecutive);
+    });
+  });
+}
+
+function renderAlarmTrendFromExec(exec){
+  const trend = exec.alarm_trend || {};
+  const series = tlmAlarmRange === '7d' ? (trend.days_7 || []) : (trend.hours_24 || []);
+  const sub = document.getElementById('tlm-alarm-sub');
+  if (sub){
+    if (tlmAlarmRange === '7d'){
+      sub.textContent = `Last 7 days · Active ${trend.active_7d ?? 0} · Cleared ${trend.cleared_7d ?? 0}`;
+    } else {
+      sub.textContent = `Last 24 hours · Active ${trend.active_24h ?? 0} · Cleared ${trend.cleared_24h ?? 0}`;
+    }
+  }
+  drawAlarmTrend('tlm-alarm-trend', series);
+}
+
+function bindRiskClickToAlarms(){
+  const openAlarms = () => showView('alarms');
+  document.querySelectorAll('.tlm-risk-click').forEach(el => {
+    if (el.dataset.riskBound) return;
+    el.dataset.riskBound = '1';
+    el.addEventListener('click', openAlarms);
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); openAlarms(); }
+    });
+  });
+}
+bindRiskClickToAlarms();
+
+async function pullSummary(){
+  try{
+    const [exec, state, ev] = await Promise.all([
+      api('/api/executive'),
+      api('/api/state'),
+      api('/api/events?limit=200'),
+    ]);
+    const tags = state.tags || {};
+    const k = exec.kpis || {};
+
+    document.getElementById('sum-health').textContent =
+      k.health_score != null ? Number(k.health_score).toFixed(1) : '–';
+    document.getElementById('sum-online').textContent = `${k.servers_online ?? '–'}/${k.total_servers ?? 4}`;
+    const fleetEl = document.getElementById('sum-fleet-perf');
+    if (fleetEl) fleetEl.textContent = k.fleet_performance != null ? fmt1(k.fleet_performance) : '–';
+    document.getElementById('sum-risk').textContent = k.risk_label || '–';
+    const riskCard = document.getElementById('sum-risk-card');
+    if (riskCard){
+      riskCard.classList.remove('tlm-risk-crit', 'tlm-risk-warn');
+      riskCard.style.outline = 'none';
+      if (k.risk_score >= 70) riskCard.classList.add('tlm-risk-crit');
+      else if (k.risk_score >= 45) riskCard.classList.add('tlm-risk-warn');
+    }
+    const stripH = document.getElementById('tlm-strip-health');
+    const stripO = document.getElementById('tlm-strip-online');
+    const stripP = document.getElementById('tlm-strip-perf');
+    const stripR = document.getElementById('tlm-strip-risk');
+    if (stripH) stripH.textContent = k.health_score != null ? Number(k.health_score).toFixed(1) : '–';
+    if (stripO) stripO.textContent = `${k.servers_online ?? '–'}/${k.total_servers ?? 4}`;
+    if (stripP) stripP.textContent = k.fleet_performance != null ? fmt1(k.fleet_performance) : '–';
+    if (stripR) stripR.textContent = k.risk_label || '–';
+
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    const active24h = (ev || []).filter(e => e.status === 'ACTIVE' && e.timestamp && new Date(e.timestamp).getTime() >= cutoff).length;
+    const alarmsEl = document.getElementById('sum-alarms-delta');
+    if (alarmsEl){
+      const drivers = (k.risk_drivers || []).slice(0, 3).join(' · ');
+      alarmsEl.textContent = drivers
+        ? `${drivers} · score ${k.risk_score ?? '–'}/100 · click Alarm Summary`
+        : `alarms in last 24h: ${active24h} · score ${k.risk_score ?? '–'}/100`;
+    }
+
+    const loadSlices = (exec.pie_load_share || []).map((s, i) => ({
+      label: s.label, value: s.value, color: TLM_COLORS[i % TLM_COLORS.length],
+    }));
+    // Defer one frame so flex card heights are settled before measuring canvas
+    lastExecutive = exec;
+    bindAlarmRangeToggle();
+    requestAnimationFrame(() => {
+      drawPieChart('tlm-pie-load', loadSlices, 'tlm-legend-load', 'CPU sum');
+      drawPieChart('tlm-pie-status', exec.pie_status || [], 'tlm-legend-status', 'servers');
+      drawPieChart('tlm-pie-health', exec.pie_health || [], 'tlm-legend-health', 'servers');
+      drawMonthlyBars('tlm-monthly', exec.monthly_performance || []);
+      renderRiskHeatmap(exec.risk_heatmap || []);
+      renderCapacityHeadroom(exec.capacity_headroom || {});
+      renderAlarmTrendFromExec(exec);
+    });
+
+    const top = exec.top_performance || [];
+    const maxScore = Math.max(...top.map(t => Number(t.performance_score || 0)), 1);
+    const topList = document.getElementById('tlm-top-list');
+    if (topList){
+      topList.innerHTML = top.map(t => `
+        <li>
+          <div class="rk">#${t.rank}</div>
+          <div>
+            <div class="name">${t.label}</div>
+            <div class="meta">CPU ${fmt1(t.cpu)}% · Temp ${fmt1(t.temperature)}°C · Latency ${fmt1(t.latency)} ms · ${t.status ? 'Online' : 'Offline'}</div>
+            <div class="tlm-bar-track"><div class="tlm-bar-fill" style="width:${(Number(t.performance_score)/maxScore)*100}%"></div></div>
+          </div>
+          <div class="score">${fmt1(t.performance_score)}<small>score / 100</small></div>
+        </li>`).join('') || '<li class="loading-inline">No ranking data</li>';
+    }
+
+    document.getElementById('sum-cards').innerHTML = [1,2,3,4].map(i => {
+      const up = !!tags[`Server${i}_Status`];
+      const cpu = tags[`Server${i}_CPU_Percent`]??0, ram = tags[`Server${i}_RAM_Percent`]??0;
+      const disk = tags[`Server${i}_Disk_Percent`]??0, temp = tags[`Server${i}_Temp_C`]??0;
+      const net = tags[`Server${i}_Network_Mbps`]??0;
+      const row = (exec.servers || []).find(s => s.server === i);
+      return `
+      <div class="kpi-card">
+        <div class="head">
+          <span class="sdot" style="background:${up?'var(--ok)':'var(--crit)'}"></span>
+          <h4>Server ${i}</h4>
+          <span style="margin-left:auto;font-family:var(--font-mono);font-size:12px;font-weight:700;">${row ? fmt1(row.performance_score) : '–'}</span>
+        </div>
+        <div class="kpi-rows">
+          <div class="r">CPU <b>${fmt1(cpu)}%</b></div>
+          <div class="r">RAM <b>${fmt1(ram)}%</b></div>
+          <div class="r">Disk <b>${fmt1(disk)}%</b></div>
+          <div class="r">Temp <b>${fmt1(temp)}°C</b></div>
+          <div class="r">Network <b>${fmt1(net)} Mbps</b></div>
+          <div class="r">Status <b style="color:${up?'var(--ok)':'var(--crit)'}">${up?'Online':'Offline'}</b></div>
+        </div>
+        <button class="viewbtn" data-open="${i}">View Details →</button>
+      </div>`;
+    }).join('');
+    $$('#sum-cards [data-open]').forEach(b => b.addEventListener('click', () => showView('server', parseInt(b.dataset.open))));
+  }catch(e){
+    const cards = document.getElementById('sum-cards');
+    if (cards) cards.innerHTML = `<div class="loading-inline">Could not load Top Level Management: ${e.message}</div>`;
+  }
+}
+
+/* ============================================================
+   ALARM SUMMARY  — top 3 AlarmEvents per server + live readings
+   ============================================================ */
+let alarmHistory = null;
+let eventFilterSev = 'ALL';
+let eventFilterServer = 'all';
+
+async function pullEvents(){
+  try{
+    alarmHistory = await api('/api/alarms/history?per_server=3');
+    const active = alarmHistory.active_count || 0;
+    document.getElementById('nav-alarm-badge').textContent = active;
+    document.getElementById('nav-alarm-badge').className = 'badge ' + (active ? '' : 'zero');
+    renderEventList();
+  }catch(e){
+    const wrap = document.getElementById('evt-by-server');
+    if (wrap) wrap.innerHTML = `<div class="panel"><div class="loading-inline">Could not load alarms: ${e.message}</div></div>`;
+  }
+}
+
+function renderEventList(){
+  const wrap = document.getElementById('evt-by-server');
+  if (!wrap) return;
+  if (!alarmHistory || !Array.isArray(alarmHistory.servers)){
+    wrap.innerHTML = `<div class="panel"><div class="loading-inline">No alarm history loaded.</div></div>`;
+    return;
+  }
+
+  let blocks = alarmHistory.servers;
+  if (eventFilterServer !== 'all'){
+    blocks = blocks.filter(b => String(b.server) === eventFilterServer);
+  }
+
+  let totalShown = 0;
+  const html = blocks.map(block => {
+    let alarms = block.alarms || [];
+    if (eventFilterSev !== 'ALL'){
+      alarms = alarms.filter(e => e.status === eventFilterSev);
+    }
+    totalShown += alarms.length;
+    const live = block.live || {};
+    const up = !!live.status;
+    const alarmRows = alarms.length
+      ? alarms.map(e => `
+          <div class="evt-row6" style="grid-template-columns:120px 90px 1.4fr 90px 90px 1fr;">
+            <div class="t">${e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</div>
+            <div><span class="sev ${String(e.severity||'INFO').toLowerCase()}">${e.severity || 'INFO'}</span></div>
+            <div>${e.event || '—'}</div>
+            <div><span class="sev ${String(e.status||'INFO').toLowerCase()}">${e.status || 'INFO'}</span></div>
+            <div class="mono">${e.live ? fmt1(e.live.cpu) + '%' : '—'}</div>
+            <div class="mono" style="color:var(--text-dim); font-size:11px;">
+              RAM ${e.live ? fmt1(e.live.ram) : '—'}% · Temp ${e.live ? fmt1(e.live.temperature) : '—'}°C · ${e.live && e.live.status ? 'UP' : 'DOWN'}
+            </div>
+          </div>`).join('')
+      : `<div class="loading-inline">No AlarmEvents for this server${eventFilterSev!=='ALL'?' matching filter':''}.</div>`;
+
+    return `
+      <div class="panel" style="margin-bottom:14px;">
+        <h3>
+          <span class="ic">▢</span> Server ${block.server}
+          <span class="hint">${alarms.length} of top ${alarmHistory.per_server || 3}</span>
+        </h3>
+        <div class="grid g-4" style="margin-bottom:12px;">
+          <div class="stat ${classify(live.cpu||0, THRESHOLDS.cpu_warning, THRESHOLDS.cpu_critical)}"><div class="lbl">Live CPU</div><div class="val">${fmt1(live.cpu)}<span class="unit">%</span></div></div>
+          <div class="stat ${classify(live.ram||0, THRESHOLDS.ram_warning, THRESHOLDS.ram_critical)}"><div class="lbl">Live RAM</div><div class="val">${fmt1(live.ram)}<span class="unit">%</span></div></div>
+          <div class="stat ${classify(live.temperature||0, THRESHOLDS.temp_warning, THRESHOLDS.temp_critical)}"><div class="lbl">Live Temp</div><div class="val">${fmt1(live.temperature)}<span class="unit">°C</span></div></div>
+          <div class="stat ${up?'ok':'crit'}"><div class="lbl">Live Status</div><div class="val" style="font-size:18px;">${up?'● UP':'● DOWN'}</div></div>
+        </div>
+        <div class="evt-row6 head" style="grid-template-columns:120px 90px 1.4fr 90px 90px 1fr;">
+          <div>Time</div><div>Severity</div><div>Event</div><div>State</div><div>Live CPU</div><div>Live readings</div>
+        </div>
+        ${alarmRows}
+      </div>`;
+  }).join('');
+
+  document.getElementById('evt-count-hint').textContent =
+    `${totalShown} alarms shown · top ${alarmHistory.per_server || 3} per server from AlarmEvents`;
+  wrap.innerHTML = html || `<div class="panel"><div class="loading-inline">No servers match this filter.</div></div>`;
+}
+
+$$('#evt-sev-filter .fchip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#evt-sev-filter .fchip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    eventFilterSev = btn.dataset.sev;
+    renderEventList();
+  });
+});
+document.getElementById('evt-server-filter').addEventListener('change', (e) => {
+  eventFilterServer = e.target.value;
+  renderEventList();
+});
+document.getElementById('evt-refresh')?.addEventListener('click', () => pullEvents());
+
+/* ============================================================
+   REPORT BUILDER  (fixed: was not wired to the backend at all)
+   ============================================================ */
+document.getElementById('rp-range').addEventListener('change', (e) => {
+  document.getElementById('rp-custom-dates').style.display = e.target.value === 'custom' ? 'grid' : 'none';
+});
+
+const RP_STORAGE_KEY = 'dc_report_filters';
+function saveReportFilters(){
+  const data = {
+    type: document.getElementById('rp-type').value,
+    scope: document.getElementById('rp-scope').value,
+    range: document.getElementById('rp-range').value,
+    format: document.getElementById('rp-format').value,
+    from: document.getElementById('rp-from').value,
+    to: document.getElementById('rp-to').value,
+    metrics: $$('.checkopt input').map(c => ({ v: c.value, on: c.checked })),
+  };
+  localStorage.setItem(RP_STORAGE_KEY, JSON.stringify(data));
+}
+function restoreReportFilters(){
+  let saved;
+  try{ saved = JSON.parse(localStorage.getItem(RP_STORAGE_KEY) || 'null'); }catch(e){ saved = null; }
+  if (!saved) return;
+  if (saved.type) document.getElementById('rp-type').value = saved.type;
+  if (saved.scope) document.getElementById('rp-scope').value = saved.scope;
+  if (saved.range) document.getElementById('rp-range').value = saved.range;
+  if (saved.format) document.getElementById('rp-format').value = saved.format;
+  if (saved.from) document.getElementById('rp-from').value = saved.from;
+  if (saved.to) document.getElementById('rp-to').value = saved.to;
+  document.getElementById('rp-custom-dates').style.display = saved.range === 'custom' ? 'grid' : 'none';
+  if (Array.isArray(saved.metrics)){
+    saved.metrics.forEach(m => {
+      const el = $$('.checkopt input').find(c => c.value === m.v);
+      if (el) el.checked = m.on;
+    });
+  }
+}
+document.querySelectorAll('#view-report select, #view-report input, .checkopt input').forEach(el => {
+  el.addEventListener('change', saveReportFilters);
+});
+restoreReportFilters();
+
+function reportOptionsFromForm(){
+  const metrics = $$('.checkopt input:checked').map(c => c.value).join(',');
+  const params = new URLSearchParams({
+    report_type: document.getElementById('rp-type').value,
+    scope: document.getElementById('rp-scope').value,
+    range: document.getElementById('rp-range').value,
+    metrics,
+  });
+  if (document.getElementById('rp-range').value === 'custom'){
+    const from = document.getElementById('rp-from').value, to = document.getElementById('rp-to').value;
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+  }
+  return params;
+}
+
+document.getElementById('rp-preview').addEventListener('click', async () => {
+  const btn = document.getElementById('rp-preview');
+  btn.disabled = true; btn.textContent = '◎ Generating…';
+  try{
+    const params = reportOptionsFromForm();
+    const data = await api('/api/report/preview?' + params.toString());
+    renderReportPreview(data);
+  }catch(e){
+    document.getElementById('rp-empty').style.display = 'flex';
+    document.getElementById('rp-content').style.display = 'none';
+    document.getElementById('rp-empty').innerHTML = `<div class="ic">⚠</div><b>Preview failed</b><span>${e.message}</span>`;
+  }finally{
+    btn.disabled = false; btn.textContent = '◎ Generate Preview';
+  }
+});
+
+document.getElementById('rp-download').addEventListener('click', () => {
+  const params = reportOptionsFromForm();
+  params.set('format', document.getElementById('rp-format').value);
+  const url = API + '/api/report?' + params.toString();
+  const a = document.createElement('a');
+  a.href = url; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+function renderReportPreview(data){
+  document.getElementById('rp-empty').style.display = 'none';
+  const content = document.getElementById('rp-content');
+  content.style.display = 'block';
+
+  const sys = data.system;
+  const briefing = data.briefing || {};
+  const statusRows = (briefing.status_rows || []).map(r => `
+    <tr>
+      <td style="font-weight:700;">Server ${r.server}</td>
+      <td style="color:${r.status === 'Online' ? 'var(--ok)' : 'var(--crit)'};font-weight:700;">${r.status}</td>
+      <td class="mono">${fmt1(r.health_score)}</td>
+      <td class="mono">${fmt1(r.cpu)}%</td>
+      <td class="mono">${fmt1(r.ram)}%</td>
+      <td class="mono">${fmt1(r.disk)}%</td>
+      <td class="mono">${fmt1(r.temperature)}°C</td>
+      <td class="mono">${fmt1(r.headroom)}%</td>
+      <td>${r.flags || '—'}</td>
+    </tr>`).join('');
+
+  const aggRows = data.aggregates.map(r => `
+    <tr>
+      <td style="font-family:inherit; font-weight:700;">Server ${r.server}</td>
+      <td>${r.samples}</td>
+      <td>${r.cpu_avg}% / ${r.cpu_max}%</td>
+      <td>${r.ram_avg}%</td>
+      <td>${r.disk_avg}% / ${r.disk_max}%</td>
+      <td>${r.temp_avg}°C / ${r.temp_max}°C</td>
+      <td>${r.network_avg} Mbps</td>
+      <td>${r.latency_avg} / ${r.latency_max} ms</td>
+      <td>${r.availability_percent}%</td>
+    </tr>`).join('');
+
+  const recs = data.recommendations.map(r => `
+    <div class="rec-item ${r.priority}">
+      <div class="top"><span class="pr">${r.priority}</span><span class="prob">${r.server?('Server '+r.server+' — '):''}${r.problem}</span></div>
+      <div class="ev">${r.evidence}</div>
+      <div class="act"><b>Action:</b> ${r.recommended_action}</div>
+    </div>`).join('');
+
+  let wbHtml = '';
+  if (data.workbench_compare && data.options?.metrics?.includes('workbench')){
+    const servers = data.workbench_compare.servers || [];
+    wbHtml = `<h3 style="font-size:13px; margin:14px 0 10px;">Workbench / Tag Updates</h3>` +
+      servers.map(s => {
+        const lines = (s.metrics || []).slice(0, 7).map(m =>
+          `<div class="mono" style="font-size:11.5px; margin:3px 0;">${m.tag_name}: SQL ${fmtVal(m.sql_value)} · Tag ${fmtVal(m.workbench_tag_value)} · Δ ${m.delta_sql_minus_tag ?? '—'}</div>`
+        ).join('');
+        const ai = s.ai ? `<div style="font-size:11.5px; color:var(--text-dim);">AI ${s.ai.risk} · pred CPU ${fmt1(s.ai.predicted_cpu)}%</div>` : '';
+        return `<div style="margin-bottom:10px;"><b>Server ${s.server}</b>${ai}${lines}</div>`;
+      }).join('');
+  }
+
+  let sqlHtml = '';
+  if (data.sql_rows && data.sql_rows.length){
+    sqlHtml = `<h3 style="font-size:13px; margin:14px 0 10px;">SQL Sample Rows${data.history_table ? ' · ' + data.history_table : ''}</h3>
+      <div class="sql-table-wrap" style="max-height:180px;">
+        <table class="sql-table">
+          <thead><tr><th>Time</th><th>Server</th><th>CPU</th><th>RAM</th><th>Temp</th><th>Status</th></tr></thead>
+          <tbody>${data.sql_rows.slice(-15).map(r => `
+            <tr>
+              <td class="mono">${r.timestamp || '—'}</td>
+              <td>${r.server ?? '—'}</td>
+              <td class="mono">${fmt1(r.cpu)}</td>
+              <td class="mono">${fmt1(r.ram)}</td>
+              <td class="mono">${fmt1(r.temperature)}</td>
+              <td>${r.status ? 'UP' : 'DOWN'}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const offlineNote = (briefing.offline_servers || []).length
+    ? `<div class="note" style="border-color:color-mix(in srgb, var(--crit) 40%, transparent);color:var(--crit);">Offline: ${briefing.offline_servers.map(n => 'Server '+n).join(', ')}</div>`
+    : '';
+
+  content.innerHTML = `
+    <div class="note" style="margin-top:0; margin-bottom:14px; line-height:1.5;">${briefing.narrative || 'Report briefing unavailable.'}</div>
+    ${offlineNote}
+    <div class="grid g-4" style="margin-bottom:16px;">
+      <div class="stat info"><div class="lbl">Health</div><div class="val" style="font-size:22px;font-weight:700;">${sys.health_score.toFixed(1)}</div></div>
+      <div class="stat"><div class="lbl">Business Risk</div><div class="val" style="font-size:20px;font-weight:700;">${sys.risk_label}</div></div>
+      <div class="stat"><div class="lbl">Online</div><div class="val" style="font-size:22px;font-weight:700;">${sys.servers_online}/${sys.total_servers}</div></div>
+      <div class="stat"><div class="lbl">Samples</div><div class="val" style="font-size:22px;font-weight:700;">${data.row_count}</div></div>
+    </div>
+    ${statusRows ? `
+    <h3 style="font-size:13px; margin:0 0 10px; letter-spacing:.08em; text-transform:uppercase;">Live Server Status</h3>
+    <div style="overflow-x:auto; margin-bottom:16px;">
+      <table class="dt">
+        <thead><tr><th>Server</th><th>State</th><th>Health</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Temp</th><th>Headroom</th><th>Flags</th></tr></thead>
+        <tbody>${statusRows}</tbody>
+      </table>
+    </div>` : ''}
+    ${(data.options?.report_type === 'alarms' || (data.options?.metrics || []).includes('alarms')) ? `
+    <div class="note" style="margin-bottom:14px;">Alarm window · Active <b>${briefing.alarm_active ?? 0}</b> · Cleared <b>${briefing.alarm_cleared ?? 0}</b></div>` : ''}
+    ${data.aggregates.length ? `
+    <h3 style="font-size:13px; margin:0 0 10px; letter-spacing:.08em; text-transform:uppercase;">History KPI Summary</h3>
+    <div style="overflow-x:auto; margin-bottom:16px;">
+      <table class="dt">
+        <thead><tr><th>Server</th><th>Samples</th><th>CPU Avg/Max</th><th>RAM Avg</th><th>Disk Avg/Max</th><th>Temp Avg/Max</th><th>Network Avg</th><th>Latency Avg/Max</th><th>Availability</th></tr></thead>
+        <tbody>${aggRows}</tbody>
+      </table>
+    </div>` : `<div class="loading-inline">No SQL history rows matched these filters — try Current Snapshot or a wider time range.</div>`}
+    ${data.recommendations.length ? `<h3 style="font-size:13px; margin-bottom:10px;">AI Recommendations in Scope</h3>${recs}` : ''}
+    ${wbHtml}
+    ${sqlHtml}
+    <div class="note">${data.logo_available ? 'Schneider Electric / AVEVA logo found — it will appear on the PDF header.' : 'No logo file found in /assets — the PDF will fall back to a text header.'}</div>
+  `;
+}
+
+function fmtVal(v){
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'boolean') return v ? 'ON' : 'OFF';
+  if (typeof v === 'number') return fmt1(v);
+  return String(v);
+}
+
+function deltaClass(d){
+  if (d === null || d === undefined) return 'delta-zero';
+  if (Math.abs(d) < 0.05) return 'delta-zero';
+  return d > 0 ? 'delta-pos' : 'delta-neg';
+}
+
+function cmpBarPct(value, metric){
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'boolean') return value ? 100 : 0;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  const caps = { cpu:100, ram:100, disk:100, temperature:90, network:1000, latency:100, status:1 };
+  const cap = caps[metric] || 100;
+  return Math.max(0, Math.min(100, (n / cap) * 100));
+}
+
+function cmpDeltaBadge(delta, unit){
+  if (delta === null || delta === undefined){
+    return { cls:'drift', text:'n/a', note:'missing workbench or SQL value' };
+  }
+  const abs = Math.abs(Number(delta));
+  if (abs < 0.05) return { cls:'sync', text:'Δ 0', note:'SQL and Workbench in sync' };
+  const signed = (delta > 0 ? '+' : '') + fmt1(delta) + (unit || '');
+  if (abs < 5) return { cls:'drift', text:'Δ ' + signed, note:'small drift — review soon' };
+  return { cls:'gap', text:'Δ ' + signed, note:'material gap — investigate' };
+}
+
+function renderCompareTable(serverPayload){
+  if (!serverPayload) return '<div class="loading-inline">No comparison data.</div>';
+  const ai = serverPayload.ai;
+  const metrics = serverPayload.metrics || [];
+
+  const aiBlock = ai
+    ? `<div class="cmp-ai">
+         <span class="risk-pill ${ai.risk}">AI ${ai.risk}</span>
+         <span class="mono">pred CPU ${fmt1(ai.predicted_cpu)}% · health ${fmt1(ai.health_score)}</span>
+         <span>${ai.recommendation || ''}</span>
+       </div>`
+    : `<div class="note" style="margin-bottom:12px;">Trained AI model unavailable — train with ai_service/train_model.py to enable predictions.</div>`;
+
+  const cards = metrics.map(m => {
+    const unit = m.unit || '';
+    const sqlPct = cmpBarPct(m.sql_value, m.metric);
+    const wbPct = cmpBarPct(m.workbench_tag_value, m.metric);
+    const badge = cmpDeltaBadge(m.delta_sql_minus_tag, unit);
+    const sqlTxt = fmtVal(m.sql_value) + (typeof m.sql_value === 'number' ? unit : '');
+    const wbTxt = fmtVal(m.workbench_tag_value) + (typeof m.workbench_tag_value === 'number' ? unit : '');
+    return `
+      <div class="cmp-metric">
+        <div class="m-title">${m.metric}<span class="tag">${m.tag_name || ''}</span></div>
+        <div class="cmp-lanes">
+          <div class="cmp-lane">
+            <span class="src">SQL</span>
+            <div class="track"><div class="fill sql" style="width:${sqlPct}%"></div></div>
+            <span class="val">${sqlTxt}</span>
+          </div>
+          <div class="cmp-lane">
+            <span class="src">Workbench</span>
+            <div class="track"><div class="fill wb" style="width:${wbPct}%"></div></div>
+            <span class="val">${wbTxt}</span>
+          </div>
+        </div>
+        <div class="cmp-delta">
+          <span class="badge ${badge.cls}">${badge.text}</span>
+          <span class="note">${badge.note}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `${aiBlock}
+    <div class="cmp-metrics">${cards || '<div class="loading-inline">No metrics</div>'}</div>`;
+}
+
+async function pullCompare(forceRender){
+  try{
+    lastCompare = await api('/api/compare');
+    if (forceRender || currentView === 'compare') renderCompareFleet(lastCompare);
+    if (currentView === 'server') renderServerCompare(lastCompare, currentServer);
+  }catch(e){
+    if (currentView === 'compare'){
+      document.getElementById('cmp-fleet').innerHTML = `<div class="loading-inline">Compare failed: ${e.message}</div>`;
+    }
+    if (currentView === 'server'){
+      document.getElementById('srv-compare').innerHTML = `<div class="loading-inline">Compare failed: ${e.message}</div>`;
+    }
+  }
+}
+
+function renderServerCompare(payload, serverNum){
+  const el = document.getElementById('srv-compare');
+  if (!el || !payload) return;
+  const server = (payload.servers || []).find(s => s.server === serverNum);
+  el.innerHTML = `<div class="cmp-server" style="margin:0;box-shadow:none;">${renderCompareTable(server)}</div>`;
+}
+
+function renderCompareFleet(payload){
+  const el = document.getElementById('cmp-fleet');
+  const hint = document.getElementById('cmp-model-hint');
+  if (hint){
+    hint.textContent = payload.model_available
+      ? 'SQL vs Workbench bars · Δ sync status · AI model loaded'
+      : ('SQL vs Workbench bars · Δ sync status · AI unavailable' + (payload.model_error ? ' — ' + payload.model_error : ''));
+  }
+  el.innerHTML = (payload.servers || []).map(s => {
+    const metrics = s.metrics || [];
+    let synced = 0, scored = 0;
+    metrics.forEach(m => {
+      const d = m.delta_sql_minus_tag;
+      if (d === null || d === undefined) return;
+      scored += 1;
+      if (Math.abs(Number(d)) < 0.05) synced += 1;
+    });
+    const agree = scored ? Math.round((synced / scored) * 100) : 0;
+    return `
+    <div class="cmp-server">
+      <div class="cmp-server-head">
+        <h4>Server ${s.server}</h4>
+        <div class="cmp-agree">Agreement <b>${agree}%</b> · ${synced}/${scored || 0} matched</div>
+      </div>
+      ${renderCompareTable(s)}
+    </div>`;
+  }).join('') || '<div class="loading-inline">No servers.</div>';
+
+  const tbody = document.getElementById('cmp-tags-body');
+  if (tbody){
+    const tags = payload.tags || [];
+    tbody.innerHTML = tags.length
+      ? tags.map(t => `<tr><td class="mono">${t.tag}</td><td class="mono">${fmtVal(t.value)}</td><td class="mono">${t.updated_at || '—'}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="loading-inline">No workbench tag rows (ServerMonitoringValues / WB_ServerNTags / LatestTagValues).</td></tr>';
+  }
+}
+
+async function loadReportSqlTable(){
+  const server = document.getElementById('rp-sql-server')?.value || '1';
+  const body = document.getElementById('rp-sql-body');
+  const hint = document.getElementById('rp-sql-hint');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="9" class="loading-inline">Loading SQL rows…</td></tr>';
+  try{
+    const rows = await api(`/api/history?server=${server}&limit=50`);
+    if (hint && lastDbStatus?.history_table) hint.textContent = `from ${lastDbStatus.history_table}`;
+    if (!rows.length){
+      body.innerHTML = '<tr><td colspan="9" class="loading-inline">No history rows returned.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.slice().reverse().map(r => `
+      <tr>
+        <td class="mono">${r.timestamp || '—'}</td>
+        <td>${server}</td>
+        <td class="mono">${fmt1(r.cpu)}</td>
+        <td class="mono">${fmt1(r.ram)}</td>
+        <td class="mono">${fmt1(r.disk)}</td>
+        <td class="mono">${fmt1(r.temperature)}</td>
+        <td class="mono">${fmt1(r.network)}</td>
+        <td class="mono">${fmt1(r.latency)}</td>
+        <td>${r.status ? 'UP' : 'DOWN'}</td>
+      </tr>`).join('');
+  }catch(e){
+    body.innerHTML = `<tr><td colspan="9" class="loading-inline">Failed: ${e.message}</td></tr>`;
+  }
+}
+document.getElementById('rp-sql-refresh')?.addEventListener('click', loadReportSqlTable);
+document.getElementById('rp-sql-server')?.addEventListener('change', loadReportSqlTable);
+
+/* ============================================================
+   STATIC AI Q&A WIDGET
+   ============================================================ */
+const AI_QUESTIONS = [
+  { id:'online', label:'Which servers are online?' },
+  { id:'cpu', label:'Which server has the highest CPU?' },
+  { id:'temp', label:'Any temperature alarms?' },
+  { id:'alarms', label:'How many active alarms right now?' },
+  { id:'ai1', label:'What is the AI risk for Server 1?' },
+  { id:'wb', label:'Any SQL vs workbench tag mismatches?' },
+  { id:'db', label:'Is the database connected?' },
+  { id:'health', label:'What is overall fleet health?' },
+];
+
+function answerAiQuestion(id){
+  const tags = lastState?.tags || {};
+  const cmp = lastCompare;
+  let text = 'No live data yet — wait for the next refresh.';
+
+  if (id === 'online'){
+    const up = [1,2,3,4].filter(i => tags[`Server${i}_Status`]);
+    text = up.length ? `Online: Server ${up.join(', Server ')} (${up.length}/4).` : 'No servers currently report Status = ON.';
+  } else if (id === 'cpu'){
+    let best = 1, bestVal = -1;
+    for (let i=1;i<=4;i++){
+      const v = Number(tags[`Server${i}_CPU_Percent`] || 0);
+      if (v > bestVal){ bestVal = v; best = i; }
+    }
+    text = `Server ${best} has the highest CPU at ${fmt1(bestVal)}%.`;
+  } else if (id === 'temp'){
+    const alarms = [1,2,3,4].filter(i => tags[`Server${i}_Temp_Alarm`]);
+    text = alarms.length
+      ? `Temperature alarm on Server ${alarms.join(', Server ')}.`
+      : 'No temperature alarms are active.';
+  } else if (id === 'alarms'){
+    const n = [1,2,3,4].reduce((acc,i) => {
+      return acc
+        + (tags[`Server${i}_CPU_Alarm`] ? 1 : 0)
+        + (tags[`Server${i}_Temp_Alarm`] ? 1 : 0)
+        + (tags[`Server${i}_Down_Alarm`] ? 1 : 0);
+    }, 0);
+    text = `There are ${n} active alarm flag(s) across CPU / Temp / Down.`;
+  } else if (id === 'ai1'){
+    const s1 = cmp?.servers?.find(s => s.server === 1);
+    if (!cmp?.model_available) text = 'Trained AI model is not loaded. Run ai_service/train_model.py to create model.pkl.';
+    else if (s1?.ai) text = `Server 1 AI risk is ${s1.ai.risk}. Predicted CPU ${fmt1(s1.ai.predicted_cpu)}%. ${s1.ai.recommendation}`;
+    else text = 'AI prediction for Server 1 is not available yet.';
+  } else if (id === 'wb'){
+    const mismatches = [];
+    (cmp?.servers || []).forEach(s => {
+      (s.metrics || []).forEach(m => {
+        if (m.delta_sql_minus_tag !== null && m.delta_sql_minus_tag !== undefined && Math.abs(m.delta_sql_minus_tag) >= 0.5){
+          mismatches.push(`S${s.server} ${m.metric}: Δ ${m.delta_sql_minus_tag}`);
+        }
+      });
+    });
+    text = mismatches.length
+      ? `Found ${mismatches.length} mismatch(es): ${mismatches.slice(0,6).join('; ')}${mismatches.length>6?'…':''}`
+      : 'SQL state and workbench tags match within 0.5 for all compared metrics.';
+  } else if (id === 'db'){
+    text = lastDbStatus?.database_connected
+      ? `Yes — connected to ${lastDbStatus.database_name || 'DataCenterKPI'}${lastDbStatus.history_table ? ' (history: ' + lastDbStatus.history_table + ')' : ''}.`
+      : `No — database is disconnected${lastDbStatus?.database_error ? ': ' + lastDbStatus.database_error : '.'}`;
+  } else if (id === 'health'){
+    const online = [1,2,3,4].filter(i => tags[`Server${i}_Status`]).length;
+    const avgCpu = Number(tags.DC_Avg_CPU || 0);
+    text = `${online}/4 servers online · fleet avg CPU ${fmt1(avgCpu)}% · max temp ${fmt1(tags.DC_Max_Temp)}°C.`;
+  }
+
+  document.getElementById('aiAnswer').style.display = 'block';
+  document.getElementById('aiAnswerText').textContent = text;
+}
+
+(function initAiWidget(){
+  const wrap = document.getElementById('aiQuestions');
+  if (!wrap) return;
+  wrap.innerHTML = AI_QUESTIONS.map(q =>
+    `<button type="button" class="ai-q" data-qid="${q.id}">${q.label}</button>`
+  ).join('');
+  wrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('.ai-q');
+    if (!btn) return;
+    if (!lastCompare) pullCompare(false);
+    answerAiQuestion(btn.dataset.qid);
+  });
+  document.getElementById('aiWidgetToggle')?.addEventListener('click', () => {
+    const w = document.getElementById('aiWidget');
+    w.classList.toggle('collapsed');
+    document.getElementById('aiWidgetChevron').textContent = w.classList.contains('collapsed') ? '+' : '−';
+  });
+})();
+
+/* ============================================================
+   KEYBOARD SHORTCUTS
+   1-4 jump to a server, O overview, S summary, I AI analytics,
+   C workbench compare, R report builder, A alarm summary.
+   ============================================================ */
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (['1','2','3','4'].includes(key)) showView('server', parseInt(key));
+  else if (key === 'o') showView('overview');
+  else if (key === 's') showView('summary');
+  else if (key === 'i') showView('ai');
+  else if (key === 'c') showView('compare');
+  else if (key === 'w') showView('wbmon');
+  else if (key === 'r') showView('report');
+  else if (key === 'a') showView('alarms');
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+showView('summary');
+startPolling();
+pullCompare(false);
+window.addEventListener('resize', () => {
+  if (currentView === 'server'){
+    const rows = heartbeatTrace[currentServer] || scopeBuffers[currentServer];
+    if (rows) drawAllScopes(rows, 'scope');
+  }
+  if (currentView === 'wbmon' && lastWbMonitor?.history){
+    drawAllScopes(lastWbMonitor.history, 'wb');
+  }
+  if (currentView === 'summary') pullSummary();
+});
+</script>
+</body>
+</html>
