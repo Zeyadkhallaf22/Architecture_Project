@@ -218,7 +218,7 @@ class DashboardClient {
             server4: ['Server 4 - Detailed Monitoring', 'Live SQL metrics, history and alarms'],
             analytics: ['AI Analytics', 'Explainable AIOps recommendations based on live KPIs and documented challenges'],
             summary: ['Summary Dashboard', 'Aggregated metrics across all four servers'],
-            reports: ['Professional Reports', 'Filtered PDF and CSV reporting with Schneider Electric and AVEVA branding'],
+            reports: ['Professional Reports', 'Filtered PDF and CSV reporting with AAST branding'],
             alarms: ['Alarm Summary', 'Active and historical alarm events from SQL Server']
         };
 
@@ -1067,8 +1067,8 @@ class DashboardClient {
         preview.innerHTML = `
             <div class="report-preview-header">
                 <div>
-                    <img class="report-preview-logo" src="/assets/schneider-aveva-logo.png" alt="Schneider Electric and AVEVA" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" />
-                    <div style="display:none;font-weight:800;"><span style="color:#087a4b;">Schneider Electric</span><span style="color:#64748b;"> | AVEVA</span></div>
+                    <img class="report-preview-logo" src="/assets/aast-logo.png" alt="Arab Academy for Science, Technology and Maritime Transport" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" />
+                    <div style="display:none;font-weight:800;color:#0b4f6c;">AAST</div>
                 </div>
                 <div style="text-align:right;font-size:11px;color:#64748b;">${new Date(data.generated_at).toLocaleString()}<br/>${this.escapeHtml(data.options.report_type)} Â· ${this.escapeHtml(data.options.scope)} Â· ${this.escapeHtml(data.options.range)}</div>
             </div>

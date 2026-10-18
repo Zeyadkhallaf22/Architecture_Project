@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign in — Data Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+if (sessionStorage.getItem("dc-login-user")) location.replace("/");
+</script>
+<style>
+:root{
+  --bg:#050814;
+  --text:#f4f7fb;
+  --muted:#9aa8b8;
+  --line:rgba(255,255,255,.12);
+  --teal:#2ee6c8;
+  --teal-2:#14c9b0;
+  --ok:#54e6a8;
+  --crit:#ff5a5a;
+}
+*{ box-sizing:border-box; margin:0; padding:0; }
+html, body{ min-height:100%; }
+body{
+  font-family:Inter, system-ui, sans-serif;
+  color:var(--text);
+  background:
+    linear-gradient(100deg, rgba(5,8,20,.88) 0%, rgba(5,8,20,.62) 48%, rgba(5,8,20,.45) 100%),
+    url("/assets/scada-server-hall-bg.png") center / cover no-repeat fixed;
+}
+button, input{ font-family:inherit; }
+.top{
+  height:74px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 36px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.brand{ display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--text); }
+.brand img{ height:46px; width:auto; background:transparent; }
+.brand span{
+  font-family:"Exo 2", sans-serif;
+  font-weight:700; letter-spacing:.08em; font-size:18px;
+}
+.top-login{ color:var(--text); font-weight:600; font-size:15px; }
+.hero{
+  min-height:calc(100vh - 74px);
+  display:grid;
+  grid-template-columns:minmax(280px, 520px) minmax(240px, 380px);
+  align-items:center;
+  justify-content:space-between;
+  gap:48px;
+  padding:48px 8vw 64px;
+}
+h1{
+  font-family:"Exo 2", sans-serif;
+  font-size:64px; font-weight:700; letter-spacing:-.03em; line-height:1;
+}
+.rule{
+  width:74px; height:4px; border-radius:4px;
+  background:var(--teal); margin:22px 0 26px;
+}
+.lead{ color:var(--muted); font-size:16px; line-height:1.55; max-width:440px; }
+form{ margin-top:28px; max-width:380px; }
+label{
+  display:block; margin:14px 0 6px;
+  font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+}
+input{
+  width:100%; padding:12px 14px; border-radius:10px;
+  border:1px solid var(--line); background:rgba(6,12,24,.72); color:var(--text); font-size:15px;
+}
+input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
+.error{ color:var(--crit); font-size:13px; min-height:1.2em; margin-top:10px; }
+.submit{
+  margin-top:16px; border:0; cursor:pointer;
+  background:var(--teal); color:#04221c; font-weight:700;
+  border-radius:10px; padding:12px 22px; font-size:15px;
+}
+.submit:hover{ background:var(--teal-2); }
+.submit:disabled{ opacity:.45; cursor:not-allowed; }
+.camera-col{ display:flex; flex-direction:column; align-items:center; }
+.cam-frame{
+  width:min(100%, 340px); aspect-ratio:1;
+  border-radius:28px; overflow:hidden; position:relative;
+  background:rgba(4,10,22,.72);
+  border:1px solid rgba(46,230,200,.35);
+  box-shadow:0 0 0 1px rgba(46,230,200,.12), 0 30px 80px rgba(0,0,0,.45), 0 0 80px rgba(46,230,200,.16);
+  display:flex; align-items:center; justify-content:center;
+}
+.cam-frame img, .cam-frame video{
+  width:100%; height:100%; object-fit:cover; transform:scaleX(-1);
+}
+.cam-wait{ color:var(--muted); font-size:14px; text-align:center; padding:16px; }
+.face-msg{ margin-top:16px; font-weight:700; font-size:18px; }
+.face-msg.granted{ color:var(--ok); }
+.face-msg.denied{ color:var(--crit); }
+.face-role{ margin-top:6px; font-weight:700; font-size:16px; min-height:1.2em; color:var(--text); }
+.face-name{ margin-top:2px; color:var(--muted); min-height:1.2em; font-size:14px; }
+@media (max-width:860px){
+  h1{ font-size:44px; }
+  .hero{ grid-template-columns:1fr; padding:32px 22px 48px; }
+  .top{ padding:0 18px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/login.html">
+    <img src="/assets/aast-logo.png" alt="AAST" />
+    <span>DATA CENTER</span>
+  </a>
+  <div class="top-login">Login</div>
+</header>
+<main class="hero">
+  <section>
+    <h1>Sign in</h1>
+    <div class="rule"></div>
+    <p class="lead">Enter your username and password. Sign in stays off until the camera grants access.</p>
+    <form id="loginForm">
+      <label for="loginUser">Username</label>
+      <input id="loginUser" name="username" autocomplete="username" />
+      <label for="loginPass">Password</label>
+      <input id="loginPass" name="password" type="password" autocomplete="current-password" />
+      <p id="loginError" class="error" hidden></p>
+      <button type="submit" id="loginSubmit" class="submit" disabled>Sign in</button>
+    </form>
+  </section>
+  <section class="camera-col">
+    <div class="cam-frame">
+      <img id="loginFrame" alt="Face camera" hidden />
+      <p id="loginCamEmpty" class="cam-wait">Camera waiting</p>
+    </div>
+    <p id="loginFaceMsg" class="face-msg denied">Access denied</p>
+    <p id="loginFaceRole" class="face-role"></p>
+    <p id="loginFaceName" class="face-name"></p>
+  </section>
+</main>
+<script>
+(function () {
+  const form = document.getElementById("loginForm");
+  const userInput = document.getElementById("loginUser");
+  const passInput = document.getElementById("loginPass");
+  const submit = document.getElementById("loginSubmit");
+  const error = document.getElementById("loginError");
+  const frame = document.getElementById("loginFrame");
+  const camEmpty = document.getElementById("loginCamEmpty");
+  const faceMsg = document.getElementById("loginFaceMsg");
+  const faceRole = document.getElementById("loginFaceRole");
+  const faceName = document.getElementById("loginFaceName");
+  const VISION = "http://127.0.0.1:8002";
+  let faceGranted = false;
+  let passwordOk = false;
+  let checkTimer = null;
+  let roster = [];
+
+  function refreshSubmit() {
+    submit.disabled = !(faceGranted && passwordOk);
+  }
+  function setFace(granted, name, role) {
+    faceGranted = granted;
+    faceMsg.textContent = granted ? "Access granted" : "Access denied";
+    faceMsg.className = "face-msg " + (granted ? "granted" : "denied");
+    faceRole.textContent = granted && role ? role : "";
+    faceName.textContent = granted && name ? name : "";
+    refreshSubmit();
+  }
+  function rosterMatch(user) {
+    if (!user) return null;
+    const name = String(user.name || "").toLowerCase();
+    const id = String(user.id || "").toLowerCase();
+    return roster.find((row) => {
+      const full = row.name.toLowerCase();
+      const compact = full.replace(/\s+/g, "");
+      return full === name || full.startsWith(name + " ") || compact === id || compact.startsWith(id);
+    }) || null;
+  }
+  async function loadRoster() {
+    try {
+      const text = await fetch("/Grad_role.csv", { cache: "no-store" }).then((res) => res.text());
+      roster = text.trim().split(/\r?\n/).slice(1).map((line) => {
+        const parts = line.split(",");
+        return { name: (parts[0] || "").trim(), role: (parts[parts.length - 1] || "").trim() };
+      }).filter((row) => row.name && row.role);
+    } catch (err) {
+      roster = [];
+    }
+  }
+  async function checkPassword() {
+    const username = userInput.value.trim();
+    const password = passInput.value;
+    if (!username || !password) {
+      passwordOk = false;
+      error.hidden = true;
+      refreshSubmit();
+      return;
+    }
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json().catch(() => ({}));
+      passwordOk = res.ok && !!data.ok;
+      if (passwordOk) {
+        error.hidden = true;
+      } else {
+        error.hidden = false;
+        error.textContent = data.error || "Wrong username or password";
+      }
+    } catch (err) {
+      passwordOk = false;
+      error.hidden = false;
+      error.textContent = "Cannot reach the dashboard server.";
+    }
+    refreshSubmit();
+  }
+  function scheduleCheck() {
+    passwordOk = false;
+    refreshSubmit();
+    if (checkTimer) clearTimeout(checkTimer);
+    checkTimer = setTimeout(checkPassword, 280);
+  }
+  async function pollCamera() {
+    try {
+      const res = await fetch(VISION + "/status", { cache: "no-store" });
+      if (!res.ok) throw new Error("status");
+      const data = await res.json();
+      const user = data.user;
+      const granted = data.locked === false && !!user;
+      const match = granted ? rosterMatch(user) : null;
+      setFace(granted, match ? match.name : (user ? user.name : ""), match ? match.role : "");
+      if (data.has_frame) {
+        frame.hidden = false;
+        camEmpty.hidden = true;
+        frame.src = VISION + "/frame.jpg?t=" + Date.now();
+      }
+    } catch (err) {
+      setFace(false, "", "");
+      frame.hidden = true;
+      camEmpty.hidden = false;
+      camEmpty.textContent = "Camera waiting";
+    }
+    setTimeout(pollCamera, 500);
+  }
+
+  userInput.addEventListener("input", scheduleCheck);
+  passInput.addEventListener("input", scheduleCheck);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!faceGranted || !passwordOk) return;
+    sessionStorage.setItem("dc-login-user", userInput.value.trim());
+    location.href = "/";
+  });
+  loadRoster().then(pollCamera);
+})();
+</script>
+</body>
+</html>

@@ -12,10 +12,12 @@ Server controls (toggle / stress / reset) still write into the same SQL tables.
 from __future__ import annotations
 
 import csv
+import hmac
 import io
 import json
 import math
 import random
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
@@ -25,9 +27,19 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import parse_qs, urlencode, urlparse
-from flask import Flask, jsonify
+import urllib.parse
+import urllib.request
 import pyodbc
-from flask_cors import CORS
+
+try:
+    from flask import Flask, jsonify
+    from flask_cors import CORS
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    Flask = None  # type: ignore[misc, assignment]
+    jsonify = None  # type: ignore[misc, assignment]
+    CORS = None  # type: ignore[misc, assignment]
 
 try:
     from ai_service.predict import predict_servers
@@ -62,15 +74,20 @@ except ImportError:
 
 
 #============================================
-# NOTE: this Flask app is no longer used to serve requests — main() runs
-# ThreadingHTTPServer with DashboardHandler, not app.run(). The /api/ai/predictions
-# route below is dead code; the live equivalent is in DashboardHandler.do_GET().
-# Kept here only so predict_servers() has somewhere obvious to live if you want to
-# migrate this whole backend to Flask properly later. Safe to delete if unused.
-app = Flask(__name__)
-
-CORS(app)
+# NOTE: Flask is optional. main() serves via ThreadingHTTPServer, not app.run().
 #====================================
+if FLASK_AVAILABLE:
+    app = Flask(__name__)
+    CORS(app)
+
+    @app.route("/api/ai/predictions", methods=["GET"])
+    def ai_predictions():
+        try:
+            return jsonify(predict_servers())
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+else:
+    app = None
 
 # ============================================================
 # CONFIGURATION
@@ -78,6 +95,11 @@ CORS(app)
 
 HOST = "127.0.0.1"
 PORT = 8000
+# First operator account. Move this into SQL Server when accounts are stored in the database.
+LOGIN_USERNAME = "mariamsalem"
+LOGIN_PASSWORD = "mariam1234"
+FACE_SERVICE_URL = "http://127.0.0.1:8003/check"
+FACE_PYTHON = Path(r"D:\AVEVA\backend2\SCADAPROJECT\.venv\Scripts\python.exe")
 POLL_SECONDS = 1.0
 # Advance one Kaggle dataset row per server on this interval (live playback)
 LIVE_DATASET_STEP_SECONDS = 5.0
@@ -93,10 +115,8 @@ CONNECTION_STRING = (
 ROOT = Path(__file__).resolve().parent
 ASSETS_DIR = ROOT / "assets"
 LOGO_CANDIDATES = (
-    ASSETS_DIR / "schneider-aveva-logo.png",
-    ASSETS_DIR / "schneider-aveva-logo.jpg",
+    ASSETS_DIR / "aast-logo.png",
     ASSETS_DIR / "brand-logo.png",
-    ROOT / "schneider-aveva-logo.png",
 )
 
 LOCK = threading.RLock()
@@ -195,30 +215,6 @@ db_connected = False
 last_update_time: datetime | None = None
 last_database_error: str | None = None
 
-
-# =====================================
-# AI PREDICTIONS API
-# =====================================
-
-@app.route("/api/ai/predictions", methods=["GET"])
-def ai_predictions():
-
-    try:
-
-        predictions = predict_servers()
-
-        return jsonify(
-            predictions
-        )
-
-
-    except Exception as e:
-
-        return jsonify({
-
-            "error": str(e)
-
-        }), 500
 
 # ============================================================
 # GENERAL HELPERS
@@ -1666,6 +1662,910 @@ def build_executive_payload() -> dict[str, Any]:
         "alarm_trend": alarm_trend,
         "servers": servers,
     }
+
+
+def build_sustainability_payload() -> dict[str, Any]:
+    """Estimate data-center sustainability KPIs from live server tags.
+
+    Modeled (not BMS-metered): IT power from utilization, facility power / PUE from
+    thermal load, water and carbon proxies. Aligns with Schneider PUE guidance used
+    elsewhere in this project.
+    """
+    with LOCK:
+        tags = state.copy()
+        connected = db_connected
+
+    # Tunable model constants (demo-grade engineering estimates)
+    idle_kw = 0.35
+    cpu_kw = 0.55
+    ram_kw = 0.12
+    disk_kw = 0.08
+    net_kw_per_gbps = 0.04
+    heat_fraction = 0.95
+    water_l_per_cooling_kwh = 1.8
+    grid_kgco2_per_kwh = 0.45  # regional grid intensity proxy
+
+    servers: list[dict[str, Any]] = []
+    drivers: list[str] = []
+
+    for number in range(1, 5):
+        online = as_bool(tags.get(f"Server{number}_Status"))
+        cpu = as_float(tags.get(f"Server{number}_CPU_Percent"))
+        ram = as_float(tags.get(f"Server{number}_RAM_Percent"))
+        disk = as_float(tags.get(f"Server{number}_Disk_Percent"))
+        temp = as_float(tags.get(f"Server{number}_Temp_C"))
+        net = as_float(tags.get(f"Server{number}_Network_Mbps"))
+
+        if not online:
+            it_kw = 0.0
+            heat_kw = 0.0
+        else:
+            it_kw = (
+                idle_kw
+                + (cpu / 100.0) * cpu_kw
+                + (ram / 100.0) * ram_kw
+                + (disk / 100.0) * disk_kw
+                + (net / 1000.0) * net_kw_per_gbps
+            )
+            temp_uplift = max(0.0, (temp - 45.0) / 40.0) * 0.12
+            heat_kw = it_kw * heat_fraction * (1.0 + temp_uplift)
+
+        # Cooling overhead factor rises with temperature (worse PUE when hot)
+        if not online:
+            cooling_factor = 0.0
+        else:
+            cooling_factor = 0.22 + max(0.0, (temp - 40.0) / 50.0) * 0.55
+            cooling_factor = float(clamp(cooling_factor, 0.18, 0.95))
+
+        facility_kw = it_kw * (1.0 + cooling_factor)
+        cooling_kw = max(0.0, facility_kw - it_kw)
+        water_lph = cooling_kw * water_l_per_cooling_kwh
+
+        servers.append(
+            {
+                "server": number,
+                "label": f"Server {number}",
+                "status": online,
+                "cpu": round(cpu, 1),
+                "temperature": round(temp, 1),
+                "it_kw": round(it_kw, 3),
+                "facility_kw": round(facility_kw, 3),
+                "heat_kw": round(heat_kw, 3),
+                "cooling_kw": round(cooling_kw, 3),
+                "water_lph": round(water_lph, 2),
+                "cooling_factor": round(cooling_factor, 3),
+            }
+        )
+
+    fleet_it = sum(s["it_kw"] for s in servers)
+    fleet_facility = sum(s["facility_kw"] for s in servers)
+    fleet_heat = sum(s["heat_kw"] for s in servers)
+    fleet_cooling = sum(s["cooling_kw"] for s in servers)
+    fleet_water = sum(s["water_lph"] for s in servers)
+    online_n = sum(1 for s in servers if s["status"])
+
+    pue = round(fleet_facility / fleet_it, 3) if fleet_it > 0.01 else None
+    dcie = round(1.0 / pue, 3) if pue else None
+    # WUE: L per kWh IT (using one hour snapshot → L/h ÷ kW = L/kWh)
+    wue = round(fleet_water / fleet_it, 3) if fleet_it > 0.01 else None
+    # CUE: kgCO2e per kWh IT ≈ grid intensity × PUE
+    cue = round(grid_kgco2_per_kwh * pue, 3) if pue else None
+
+    def band_pue(v: float | None) -> str:
+        if v is None:
+            return "unknown"
+        if v < 1.4:
+            return "good"
+        if v < 1.7:
+            return "watch"
+        return "poor"
+
+    def band_wue(v: float | None) -> str:
+        if v is None:
+            return "unknown"
+        if v < 1.5:
+            return "good"
+        if v < 2.5:
+            return "watch"
+        return "poor"
+
+    def band_cue(v: float | None) -> str:
+        if v is None:
+            return "unknown"
+        if v < 0.55:
+            return "good"
+        if v < 0.85:
+            return "watch"
+        return "poor"
+
+    hot = [s for s in servers if s["status"] and s["temperature"] >= THRESHOLDS["temp_warning"]]
+    if hot:
+        drivers.append(
+            f"Elevated temperature on {', '.join(s['label'] for s in hot)} increases cooling overhead / PUE"
+        )
+    heavy = sorted([s for s in servers if s["status"]], key=lambda s: s["it_kw"], reverse=True)
+    if heavy:
+        top = heavy[0]
+        share = (top["it_kw"] / fleet_it * 100.0) if fleet_it > 0.01 else 0.0
+        if share >= 35:
+            drivers.append(f"{top['label']} draws {share:.0f}% of estimated IT power")
+    offline = [s["label"] for s in servers if not s["status"]]
+    if offline:
+        drivers.append(f"Offline (excluded from load): {', '.join(offline)}")
+    if not drivers:
+        drivers.append("Fleet thermal and power estimates within modeled comfort bands")
+
+    for s in servers:
+        s["power_share_pct"] = round((s["it_kw"] / fleet_it * 100.0) if fleet_it > 0.01 else 0.0, 1)
+        s["heat_share_pct"] = round((s["heat_kw"] / fleet_heat * 100.0) if fleet_heat > 0.01 else 0.0, 1)
+
+    pue_band = band_pue(pue)
+    wue_band = band_wue(wue)
+    cue_band = band_cue(cue)
+
+    def _status_label(band: str) -> str:
+        return {"good": "Excellent", "watch": "Watch", "poor": "Poor"}.get(band, "Unknown")
+
+    # Hero gauges — PUE / WUE / CUE (primary Command Center metrics)
+    # Band thresholds (lower is better): good < warn_limit ≤ watch < poor_limit ≤ poor
+    warn_pue, poor_pue = 1.40, 1.70
+    warn_wue, poor_wue = 1.50, 2.50
+    warn_cue, poor_cue = 0.55, 0.85
+    target_pue, target_wue, target_cue = 1.20, 1.00, 0.40
+    gauges = {
+        "pue": {
+            "value": pue,
+            "target": target_pue,
+            "warn_limit": warn_pue,
+            "poor_limit": poor_pue,
+            "band": pue_band,
+            "status_label": _status_label(pue_band),
+            "worry_hint": (
+                f"Worry when PUE ≥ {warn_pue:.2f} (Watch) or ≥ {poor_pue:.2f} (Poor). "
+                "Lower is better — facility power vs IT load."
+            ),
+            "delta_text": (
+                f"{'Better' if pue is not None and pue <= target_pue else 'Above target'} · "
+                f"target {target_pue:.2f}"
+                if pue is not None
+                else "No IT load"
+            ),
+            "unit": "",
+            "min": 1.0,
+            "max": 2.2,
+        },
+        "wue": {
+            "value": wue,
+            "target": target_wue,
+            "warn_limit": warn_wue,
+            "poor_limit": poor_wue,
+            "band": wue_band,
+            "status_label": _status_label(wue_band),
+            "worry_hint": (
+                f"Worry when WUE ≥ {warn_wue:.2f} L/kWh (Watch) or ≥ {poor_wue:.2f} (Poor). "
+                "Lower is better — water vs IT energy."
+            ),
+            "delta_text": f"Target {target_wue:.2f} L/kWh · modeled",
+            "unit": "L/kWh",
+            "min": 0.0,
+            "max": 3.5,
+        },
+        "cue": {
+            "value": cue,
+            "target": target_cue,
+            "warn_limit": warn_cue,
+            "poor_limit": poor_cue,
+            "band": cue_band,
+            "status_label": _status_label(cue_band),
+            "worry_hint": (
+                f"Worry when CUE ≥ {warn_cue:.2f} kgCO₂e/kWh (Watch) or ≥ {poor_cue:.2f} (Poor). "
+                "Lower is better — carbon intensity × PUE."
+            ),
+            "delta_text": f"Target {target_cue:.2f} · grid × PUE",
+            "unit": "kgCO₂e/kWh",
+            "min": 0.0,
+            "max": 1.2,
+        },
+    }
+
+    # Carbon scopes (kgCO2e/h) from facility power × intensity
+    co2_kg_per_h = fleet_facility * grid_kgco2_per_kwh
+    carbon_scopes = [
+        {"id": "scope1", "label": "Scope 1 (Direct)", "value": round(co2_kg_per_h * 0.05, 3)},
+        {"id": "scope2", "label": "Scope 2 (Grid)", "value": round(co2_kg_per_h * 0.90, 3)},
+        {"id": "scope3", "label": "Scope 3 (Supply)", "value": round(co2_kg_per_h * 0.05, 3)},
+    ]
+
+    # 72h CFE vs grid intensity (synthetic demo series anchored to live CUE/PUE)
+    ref_pct = 0.85
+    base_cfe = ref_pct * 100.0
+    base_intensity = grid_kgco2_per_kwh * (pue or 1.4)
+    cfe_72h: list[dict[str, Any]] = []
+    now = datetime.now()
+    for i in range(72):
+        t = now - timedelta(hours=71 - i)
+        wave = math.sin(i / 72.0 * math.pi * 2) * 4.0
+        temp_stress = max(0.0, ((sum(s["temperature"] for s in servers if s["status"]) / max(online_n, 1)) - 50.0) / 20.0)
+        cfe = float(clamp(base_cfe + wave - temp_stress * 3.0, 60.0, 98.0))
+        intensity = float(clamp(base_intensity - wave * 0.01 + temp_stress * 0.05, 0.25, 0.95))
+        cfe_72h.append(
+            {
+                "t": t.isoformat(timespec="minutes"),
+                "cfe_pct": round(cfe, 1),
+                "grid_intensity": round(intensity, 3),
+            }
+        )
+
+    # 7-day power trend (synthetic from live IT/cooling with light variation)
+    power_trend_7d: list[dict[str, Any]] = []
+    for d in range(7):
+        day = now.date() - timedelta(days=6 - d)
+        wobble = 0.92 + 0.08 * math.sin(d * 1.1)
+        it_d = fleet_it * wobble
+        cool_d = fleet_cooling * (0.95 + 0.1 * math.cos(d * 0.9))
+        power_trend_7d.append(
+            {
+                "day": day.isoformat(),
+                "label": day.strftime("%a"),
+                "it_kw": round(it_d, 3),
+                "cooling_kw": round(cool_d, 3),
+                "total_kw": round(it_d + cool_d, 3),
+            }
+        )
+
+    erf_fraction = 0.14
+    erf_kw = fleet_heat * erf_fraction
+    ref = {
+        "value": round(ref_pct, 3),
+        "pct": round(ref_pct * 100.0, 1),
+        "grid_mix_pct": round((1.0 - ref_pct) * 100.0, 1),
+        "sources": "PPA · Solar · Wind",
+        "band": "good",
+    }
+    erf = {
+        "value": round(erf_fraction, 3),
+        "pct": round(erf_fraction * 100.0, 1),
+        "reused_kw": round(erf_kw, 3),
+        "label": "Waste heat reused",
+        "detail": "Modeled district-heating reuse of rejected heat",
+        "band": "good",
+    }
+
+    water_mix = [
+        {"id": "potable", "label": "Potable", "pct": 70.0},
+        {"id": "recycled", "label": "Recycled", "pct": 25.0},
+        {"id": "harvested", "label": "Harvested", "pct": 5.0},
+    ]
+    water_sources = {
+        "total_lph": round(fleet_water, 2),
+        "slices": [
+            {
+                **m,
+                "lph": round(fleet_water * m["pct"] / 100.0, 2),
+            }
+            for m in water_mix
+        ],
+    }
+
+    ewaste = [
+        {"id": "it_recycle", "label": "IT asset recycling rate", "value": 98, "ok": True},
+        {"id": "ups_recycle", "label": "UPS battery recycling", "value": 100, "ok": True},
+        {"id": "hazmat", "label": "Hazardous materials tracking", "value": None, "ok": False, "note": "Open action"},
+    ]
+
+    thermal_map = []
+    for s in servers:
+        temp = s["temperature"]
+        if not s["status"]:
+            level = "off"
+        elif temp >= THRESHOLDS["temp_critical"]:
+            level = "crit"
+        elif temp >= THRESHOLDS["temp_warning"]:
+            level = "watch"
+        else:
+            level = "ok"
+        thermal_map.append(
+            {
+                "server": s["server"],
+                "label": s["label"],
+                "temperature": temp,
+                "status": s["status"],
+                "level": level,
+            }
+        )
+
+    alert_msg = None
+    alert_severity = "info"
+    if pue_band == "poor" or any(t["level"] == "crit" for t in thermal_map):
+        alert_severity = "crit"
+        alert_msg = drivers[0] if drivers else "PUE / thermal stress detected"
+    elif pue_band == "watch" or any(t["level"] == "watch" for t in thermal_map):
+        alert_severity = "warn"
+        alert_msg = drivers[0] if drivers else "Cooling overhead elevated — monitor PUE"
+    elif drivers and "Offline" in drivers[0]:
+        alert_severity = "warn"
+        alert_msg = drivers[0]
+    else:
+        alert_msg = "All modeled sustainability KPIs within target bands"
+
+    kpi_pills = [
+        {"id": "pue", "label": "PUE", "value": pue, "band": pue_band},
+        {"id": "wue", "label": "WUE", "value": wue, "band": wue_band},
+        {"id": "cue", "label": "CUE", "value": cue, "band": cue_band},
+        {"id": "ref", "label": "REF", "value": ref["value"], "band": ref["band"]},
+        {"id": "erf", "label": "ERF", "value": erf["value"], "band": erf["band"]},
+    ]
+
+    system_ok = online_n == 4 and pue_band != "poor"
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "database_connected": connected,
+        "modeled": True,
+        "title": "Sustainability",
+        "subtitle": "Modeled real-time KPIs · ISO 14001 / 50001-aligned",
+        "note": (
+            "Estimated from live CPU/RAM/Disk/Temp/Network tags — not metered PDU/BMS. "
+            "PUE guidance aligns with Schneider Electric data-center KPI practice (see SCHNEIDER-PUE)."
+        ),
+        "assumptions": {
+            "idle_kw": idle_kw,
+            "cpu_kw": cpu_kw,
+            "ram_kw": ram_kw,
+            "disk_kw": disk_kw,
+            "heat_fraction": heat_fraction,
+            "water_l_per_cooling_kwh": water_l_per_cooling_kwh,
+            "grid_kgco2_per_kwh": grid_kgco2_per_kwh,
+            "ref_pct": ref_pct,
+            "erf_fraction": erf_fraction,
+        },
+        "fleet": {
+            "servers_online": online_n,
+            "total_servers": 4,
+            "it_kw": round(fleet_it, 3),
+            "facility_kw": round(fleet_facility, 3),
+            "cooling_kw": round(fleet_cooling, 3),
+            "heat_kw": round(fleet_heat, 3),
+            "water_lph": round(fleet_water, 2),
+            "pue": pue,
+            "dcie": dcie,
+            "wue": wue,
+            "cue": cue,
+            "pue_band": pue_band,
+            "wue_band": wue_band,
+            "cue_band": cue_band,
+        },
+        "gauges": gauges,
+        "carbon": {
+            "total_kg_per_h": round(co2_kg_per_h, 3),
+            "scopes": carbon_scopes,
+            "cfe_72h": cfe_72h,
+        },
+        "power_trend_7d": power_trend_7d,
+        "ref": ref,
+        "erf": erf,
+        "water_sources": water_sources,
+        "ewaste": ewaste,
+        "thermal_map": thermal_map,
+        "alerts": [{"severity": alert_severity, "message": alert_msg}],
+        "kpi_pills": kpi_pills,
+        "system_status": {
+            "ok": system_ok,
+            "label": "All Systems Operational" if system_ok else "Attention Required",
+            "online": f"{online_n}/4",
+        },
+        "servers": servers,
+        "drivers": drivers,
+        "bands": {
+            "pue": {"good": "< 1.4", "watch": "1.4 – 1.7", "poor": "≥ 1.7"},
+            "wue": {"good": "< 1.5 L/kWh", "watch": "1.5 – 2.5", "poor": "≥ 2.5"},
+            "cue": {"good": "< 0.55", "watch": "0.55 – 0.85", "poor": "≥ 0.85"},
+        },
+    }
+
+
+def build_oee_payload(window: str = "12h") -> dict[str, Any]:
+    """Model fleet effectiveness from live tags + recent alarms (DC insights).
+
+    Effectiveness = Infra Availability × Compute Utilization × Job Success.
+    Timeline / reasons / MTBF·MTTR are demo-grade estimates (not MES/BMS).
+    """
+    with LOCK:
+        tags = state.copy()
+        connected = db_connected
+
+    window_key = (window or "12h").lower()
+    hours = {"today": 24, "12h": 12, "7d": 168}.get(window_key, 12)
+
+    online_flags: list[bool] = []
+    cpus: list[float] = []
+    rams: list[float] = []
+    disks: list[float] = []
+    nets: list[float] = []
+    temps: list[float] = []
+    latencies: list[float] = []
+    down_alarms = 0
+    cpu_alarms = 0
+    temp_alarms = 0
+    servers_prod: list[dict[str, Any]] = []
+
+    for number in range(1, 5):
+        online = as_bool(tags.get(f"Server{number}_Status"))
+        cpu = as_float(tags.get(f"Server{number}_CPU_Percent"))
+        ram = as_float(tags.get(f"Server{number}_RAM_Percent"))
+        disk = as_float(tags.get(f"Server{number}_Disk_Percent"))
+        net = as_float(tags.get(f"Server{number}_Network_Mbps"))
+        temp = as_float(tags.get(f"Server{number}_Temp_C"))
+        lat = as_float(tags.get(f"Server{number}_Latency_ms"))
+        online_flags.append(online)
+        if online:
+            cpus.append(cpu)
+            rams.append(ram)
+            disks.append(disk)
+            nets.append(net)
+            temps.append(temp)
+            latencies.append(lat)
+        if as_bool(tags.get(f"Server{number}_Down_Alarm")):
+            down_alarms += 1
+        if as_bool(tags.get(f"Server{number}_CPU_Alarm")):
+            cpu_alarms += 1
+        if as_bool(tags.get(f"Server{number}_Temp_Alarm")):
+            temp_alarms += 1
+        units = 0.0
+        if online:
+            units = (net * 0.85) + (cpu * 12.0)
+        servers_prod.append(
+            {
+                "server": number,
+                "label": f"Server {number}",
+                "status": online,
+                "units": round(units, 1),
+                "cpu": round(cpu, 1),
+                "network": round(net, 1),
+            }
+        )
+
+    online_n = sum(1 for x in online_flags if x)
+    server_uptime = online_n / 4.0
+
+    # Infra Availability: facility/host uptime share with soft alarm penalty
+    avail = server_uptime
+    avail -= down_alarms * 0.12
+    avail -= min(0.15, (cpu_alarms + temp_alarms) * 0.04)
+    avail = float(clamp(avail, 0.05, 1.0))
+
+    # Compute Utilization: CPU/RAM/Disk vs healthy design band (~55–75%)
+    if cpus:
+        avg_cpu = sum(cpus) / len(cpus)
+        avg_ram = sum(rams) / max(len(rams), 1)
+        avg_disk = sum(disks) / max(len(disks), 1)
+        score_cpu = 1.0 - abs(avg_cpu - 65.0) / 65.0
+        score_ram = 1.0 - abs(avg_ram - 60.0) / 60.0
+        score_disk = 1.0 - abs(avg_disk - 55.0) / 55.0
+        performance = float(
+            clamp(
+                0.5 * clamp(score_cpu, 0.15, 1.0)
+                + 0.3 * clamp(score_ram, 0.15, 1.0)
+                + 0.2 * clamp(score_disk, 0.15, 1.0),
+                0.1,
+                1.0,
+            )
+        )
+    else:
+        avg_cpu = 0.0
+        avg_ram = 0.0
+        avg_disk = 0.0
+        performance = 0.15
+
+    # Job Success Rate: inverse of critical stress + latency/network defect proxy
+    avg_lat = (sum(latencies) / len(latencies)) if latencies else 0.0
+    net_error = 0.0
+    if latencies:
+        net_error += min(0.35, sum(1 for x in latencies if x >= THRESHOLDS["latency_warning"]) * 0.08)
+        net_error += min(0.25, avg_lat / max(THRESHOLDS["latency_critical"], 1.0) * 0.2)
+    net_error += cpu_alarms * 0.04 + temp_alarms * 0.05 + down_alarms * 0.1
+    net_error = float(clamp(net_error, 0.0, 0.65))
+
+    quality = 1.0
+    quality -= temp_alarms * 0.08
+    quality -= cpu_alarms * 0.05
+    quality -= net_error * 0.55
+    if temps:
+        hot_n = sum(1 for t in temps if t >= THRESHOLDS["temp_warning"])
+        quality -= hot_n * 0.05
+    if cpus:
+        over_n = sum(1 for c in cpus if c >= THRESHOLDS["cpu_critical"])
+        quality -= over_n * 0.06
+    quality = float(clamp(quality, 0.35, 0.999))
+
+    oee = float(clamp(avail * performance * quality, 0.02, 1.0))
+
+    # Lightweight PUE estimate (same spirit as sustainability)
+    fleet_it = 0.0
+    fleet_facility = 0.0
+    for number in range(1, 5):
+        if not online_flags[number - 1]:
+            continue
+        cpu = as_float(tags.get(f"Server{number}_CPU_Percent"))
+        ram = as_float(tags.get(f"Server{number}_RAM_Percent"))
+        temp = as_float(tags.get(f"Server{number}_Temp_C"))
+        it_kw = 0.15 + (cpu / 100.0) * 0.55 + (ram / 100.0) * 0.2
+        cool = 0.25 + max(0.0, (temp - 45.0) / 80.0)
+        fleet_it += it_kw
+        fleet_facility += it_kw * (1.0 + cool)
+    pue_est = round(fleet_facility / fleet_it, 3) if fleet_it > 0.01 else None
+
+    def band_pct(v: float) -> str:
+        if v >= 0.85:
+            return "good"
+        if v >= 0.60:
+            return "watch"
+        return "poor"
+
+    def gauge(
+        gid: str,
+        label: str,
+        value: float,
+        target: float,
+        warn_limit: float,
+        worry_hint: str,
+        asset_note: str,
+    ) -> dict[str, Any]:
+        b = band_pct(value)
+        return {
+            "id": gid,
+            "label": label,
+            "value_pct": round(value * 100.0, 3),
+            "value": round(value, 4),
+            "target": target,
+            "warn_limit": warn_limit,
+            "poor_limit": 0.60,
+            "band": b,
+            "status_label": {"good": "Excellent", "watch": "Watch", "poor": "Poor"}[b],
+            "worry_hint": worry_hint,
+            "asset_note": asset_note,
+        }
+
+    gauges = {
+        "oee": gauge(
+            "oee",
+            "Effectiveness",
+            oee,
+            0.85,
+            0.85,
+            "Worry when Effectiveness < 85% (Watch) or < 60% (Poor). Product of Availability × Utilization × Job Success.",
+            f"fleet composite · {online_n}/4 hosts up",
+        ),
+        "availability": gauge(
+            "availability",
+            "Infra Availability",
+            avail,
+            0.90,
+            0.85,
+            "Worry when Infra Availability < 85% (Watch) or < 60% (Poor). Facility/host uptime vs planned operating time.",
+            f"server uptime {online_n}/4 ({round(server_uptime * 100)}%)",
+        ),
+        "performance": gauge(
+            "performance",
+            "Compute Utilization",
+            performance,
+            0.85,
+            0.85,
+            "Worry when Compute Utilization score < 85% (Watch) or < 60% (Poor). Idle or overloaded CPU/RAM/Disk vs design capacity.",
+            f"avg CPU {round(avg_cpu, 1)}% · RAM {round(avg_ram, 1)}% · Disk {round(avg_disk, 1)}%",
+        ),
+        "quality": gauge(
+            "quality",
+            "Job Success",
+            quality,
+            0.95,
+            0.85,
+            "Worry when Job Success < 85% (Watch) or < 60% (Poor). Workloads completed without faults / network defects.",
+            f"net error proxy {round(net_error * 100, 1)}%",
+        ),
+    }
+
+    events = read_events(limit=200)
+    cutoff = datetime.now() - timedelta(hours=hours)
+    recent = []
+    for e in events:
+        ts = e.get("timestamp")
+        if not ts:
+            continue
+        try:
+            et = datetime.fromisoformat(ts.replace("Z", ""))
+        except ValueError:
+            continue
+        if et >= cutoff:
+            recent.append({**e, "_dt": et})
+
+    # MTBF / MTTR from ACTIVE↔CLEAR pairs (fallback synthetic)
+    actives: list[datetime] = []
+    clears: list[datetime] = []
+    repair_mins: list[float] = []
+    last_active: datetime | None = None
+    for e in sorted(recent, key=lambda x: x["_dt"]):
+        st = str(e.get("status") or "").upper()
+        if st == "ACTIVE":
+            actives.append(e["_dt"])
+            last_active = e["_dt"]
+        elif st in {"CLEAR", "CLEARED", "OK", "NORMAL"} and last_active is not None:
+            clears.append(e["_dt"])
+            repair_mins.append(max(1.0, (e["_dt"] - last_active).total_seconds() / 60.0))
+            last_active = None
+    if len(actives) >= 2:
+        gaps_h = [
+            (actives[i] - actives[i - 1]).total_seconds() / 3600.0
+            for i in range(1, len(actives))
+            if (actives[i] - actives[i - 1]).total_seconds() > 0
+        ]
+        mtbf_hours = round(sum(gaps_h) / len(gaps_h), 2) if gaps_h else round(hours / max(len(actives), 1), 2)
+    else:
+        mtbf_hours = round(max(2.0, hours / max(1, down_alarms + cpu_alarms + temp_alarms + 1)), 2)
+    mttr_minutes = round(sum(repair_mins) / len(repair_mins), 1) if repair_mins else round(
+        18.0 + down_alarms * 12.0 + temp_alarms * 8.0, 1
+    )
+
+    # AVEVA-style reason labels ← DC insights
+    reason_catalog = [
+        "Starved Supply",
+        "No Orders",
+        "CPU Overload",
+        "Planned Maintenance",
+        "Faulty Wiring",
+        "Sticking Valve",
+    ]
+    reason_map = {
+        "down": "No Orders",
+        "offline": "No Orders",
+        "cpu": "CPU Overload",
+        "temp": "Faulty Wiring",
+        "thermal": "Faulty Wiring",
+        "latency": "Sticking Valve",
+        "network": "Sticking Valve",
+        "alarm": "CPU Overload",
+        "planned": "Planned Maintenance",
+        "maintenance": "Planned Maintenance",
+        "starve": "Starved Supply",
+        "idle": "Starved Supply",
+    }
+    counts: dict[str, int] = {k: 0 for k in reason_catalog}
+    durations: dict[str, float] = {k: 0.0 for k in reason_catalog}
+    for e in recent:
+        name = str(e.get("event") or "").lower()
+        label = None
+        for key, mapped in reason_map.items():
+            if key in name:
+                label = mapped
+                break
+        if label is None:
+            if e.get("status") == "ACTIVE":
+                # Default active alarm → thermal / wiring analogue
+                label = "Faulty Wiring"
+            else:
+                continue
+        if label not in counts:
+            counts[label] = 0
+            durations[label] = 0.0
+        counts[label] += 1
+        sev = str(e.get("severity") or "").upper()
+        dur = 45.0 if sev in {"CRITICAL", "HIGH"} else 22.0
+        durations[label] += dur
+
+    # Layer live-tag DC insights on top (always enrich so charts aren't single-bar)
+    offline_n = 4 - online_n
+    if offline_n:
+        counts["No Orders"] = max(counts["No Orders"], offline_n)
+        durations["No Orders"] = max(durations["No Orders"], offline_n * 180.0)
+    if cpu_alarms or (cpus and any(c >= THRESHOLDS["cpu_critical"] for c in cpus)):
+        n = max(cpu_alarms, sum(1 for c in cpus if c >= THRESHOLDS["cpu_critical"]) if cpus else 0, 1)
+        counts["CPU Overload"] = max(counts["CPU Overload"], n)
+        durations["CPU Overload"] = max(durations["CPU Overload"], n * 90.0)
+    if temp_alarms or (temps and any(t >= THRESHOLDS["temp_warning"] for t in temps)):
+        n = max(temp_alarms, sum(1 for t in temps if t >= THRESHOLDS["temp_warning"]) if temps else 0, 1)
+        counts["Faulty Wiring"] = max(counts["Faulty Wiring"], n)
+        durations["Faulty Wiring"] = max(durations["Faulty Wiring"], n * 70.0)
+    if avg_lat >= THRESHOLDS["latency_warning"] or net_error >= 0.15:
+        n = max(1, sum(1 for x in latencies if x >= THRESHOLDS["latency_warning"]) if latencies else 1)
+        counts["Sticking Valve"] = max(counts["Sticking Valve"], n)
+        durations["Sticking Valve"] = max(durations["Sticking Valve"], n * 55.0)
+    if avg_cpu < 25 and online_n:
+        counts["Starved Supply"] = max(counts["Starved Supply"], max(1, online_n))
+        durations["Starved Supply"] = max(durations["Starved Supply"], 120.0 * online_n)
+    # Planned maintenance always has a light presence for demo completeness
+    if counts["Planned Maintenance"] == 0:
+        counts["Planned Maintenance"] = 1
+        durations["Planned Maintenance"] = 25.0 + (hours * 0.4)
+
+    # If fleet is calm, still show Running as context row
+    running_extra = None
+    if sum(1 for v in counts.values() if v > 0) <= 1 and online_n:
+        running_extra = ("Running (Normal)", online_n or 1, 60.0 * (online_n or 1))
+
+    # Always emit full AVEVA-style catalog (zeros allowed), ranked by value
+    reasons_count = [
+        {"label": k, "value": int(counts[k]), "color": _oee_reason_color(k)}
+        for k in sorted(reason_catalog, key=lambda x: (-counts[x], x))
+    ]
+    reasons_duration = [
+        {"label": k, "value": round(float(durations[k]), 1), "color": _oee_reason_color(k)}
+        for k in sorted(reason_catalog, key=lambda x: (-durations[x], x))
+    ]
+    # Guarantee every catalog row is present with an explicit numeric reading
+    for lst, src in ((reasons_count, counts), (reasons_duration, durations)):
+        have = {r["label"] for r in lst}
+        for k in reason_catalog:
+            if k not in have:
+                lst.append({
+                    "label": k,
+                    "value": int(src[k]) if lst is reasons_count else round(float(src[k]), 1),
+                    "color": _oee_reason_color(k),
+                })
+    if running_extra:
+        reasons_count.insert(0, {
+            "label": running_extra[0],
+            "value": running_extra[1],
+            "color": _oee_reason_color(running_extra[0]),
+        })
+        reasons_duration.insert(0, {
+            "label": running_extra[0],
+            "value": round(running_extra[2], 1),
+            "color": _oee_reason_color(running_extra[0]),
+        })
+
+    timeline = _oee_build_timeline(online_flags, cpus, temps, hours)
+
+    now = datetime.now()
+    production = []
+    base_units = sum(s["units"] for s in servers_prod) or 100.0
+    days = 3 if hours <= 24 else min(7, max(3, hours // 24))
+    for d in range(days):
+        day = now.date() - timedelta(days=days - 1 - d)
+        wobble = 0.88 + 0.12 * math.sin(d * 1.3 + online_n)
+        production.append(
+            {
+                "date": day.isoformat(),
+                "label": day.strftime("%d/%m/%Y"),
+                "units": round(base_units * wobble * (0.7 + 0.3 * avail), 1),
+            }
+        )
+
+    insights = {
+        "server_uptime_pct": round(server_uptime * 100.0, 1),
+        "mtbf_hours": mtbf_hours,
+        "mttr_minutes": mttr_minutes,
+        "network_error_rate_pct": round(net_error * 100.0, 1),
+        "pue": pue_est,
+    }
+
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "database_connected": connected,
+        "modeled": True,
+        "window": window_key,
+        "window_hours": hours,
+        "title": "OEE · Equipment Effectiveness",
+        "subtitle": "Infra Availability · Compute Utilization · Job Success · modeled DC insights",
+        "note": (
+            "Estimated from live Status/CPU/RAM/Disk/Network/Temp/Latency tags and AlarmEvents — "
+            "not MES counters or BMS downtime codes."
+        ),
+        "gauges": gauges,
+        "insights": insights,
+        "timeline": timeline,
+        "reasons_count": reasons_count,
+        "reasons_duration": reasons_duration,
+        "production": production,
+        "servers": servers_prod,
+        "fleet": {
+            "servers_online": online_n,
+            "total_servers": 4,
+            "oee_pct": gauges["oee"]["value_pct"],
+            "availability_pct": gauges["availability"]["value_pct"],
+            "performance_pct": gauges["performance"]["value_pct"],
+            "quality_pct": gauges["quality"]["value_pct"],
+        },
+    }
+
+
+def _oee_reason_color(label: str) -> str:
+    """Bright SCADA palette — readable on dark teal glass (no deep/muddy hues)."""
+    key = label.lower()
+    if "running" in key or "normal" in key:
+        return "#54e6a8"
+    if "starved" in key:
+        return "#3de0ff"
+    if "no orders" in key or "orders" in key:
+        return "#7ad7ff"
+    if "planned" in key:
+        return "#c4a0ff"  # lavender — distinct from amber CPU / coral fault bars
+    if "cpu" in key or "overload" in key:
+        return "#ff8a3d"
+    if "faulty" in key or "wiring" in key:
+        return "#ff6b6b"
+    if "sticking" in key or "valve" in key:
+        return "#ff4d9a"
+    if "offline" in key or "host" in key:
+        return "#8eb0c8"
+    return "#ff6b6b"
+
+
+def _oee_build_timeline(
+    online_flags: list[bool],
+    cpus: list[float],
+    temps: list[float],
+    hours: int,
+) -> list[dict[str, Any]]:
+    """Build a utilization event timeline as consecutive state segments."""
+    now = datetime.now()
+    start = now - timedelta(hours=hours)
+    slots = int(clamp(hours * 2, 16, 48))
+    slot_h = hours / slots
+    avg_cpu = (sum(cpus) / len(cpus)) if cpus else 0.0
+    avg_temp = (sum(temps) / len(temps)) if temps else 40.0
+    online_n = sum(1 for x in online_flags if x)
+
+    states: list[str] = []
+    for i in range(slots):
+        # Multi-frequency waves so Starved / Planned / Offline show up visibly
+        wave = math.sin(i / max(slots, 1) * math.pi * 3)
+        wave2 = math.cos(i / max(slots, 1) * math.pi * 5)
+        phase = i / max(slots, 1)
+
+        if online_n == 0:
+            st = "Offline"
+        elif online_n < 4 and (wave2 < -0.55 or (0.35 < phase < 0.42)):
+            st = "Offline"
+        elif avg_temp >= THRESHOLDS["temp_critical"] and wave > 0.15:
+            st = "Fault"
+        elif avg_cpu >= THRESHOLDS["cpu_critical"] and wave > 0.1:
+            st = "Fault"
+        elif (avg_cpu < 28 or wave < -0.35) and wave2 > 0.1 and online_n:
+            st = "Starved"
+        elif wave > 0.55 and (i % 7 == 0 or wave2 > 0.7):
+            st = "Planned"
+        elif avg_temp >= THRESHOLDS["temp_warning"] and wave > 0.45:
+            st = "Fault"
+        else:
+            st = "Running"
+        states.append(st)
+
+    # Guarantee at least one Starved and one Planned segment when hosts are up
+    if online_n and "Starved" not in states:
+        states[max(2, slots // 4)] = "Starved"
+        if slots > 8:
+            states[max(3, slots // 4 + 1)] = "Starved"
+    if online_n and "Planned" not in states:
+        states[min(slots - 2, (slots * 3) // 4)] = "Planned"
+
+    colors = {
+        "Running": "#54e6a8",
+        "Starved": "#3de0ff",
+        "Fault": "#ff6b6b",
+        "Planned": "#c4a0ff",
+        "Offline": "#8eb0c8",
+    }
+
+    segments: list[dict[str, Any]] = []
+    i = 0
+    while i < len(states):
+        j = i + 1
+        while j < len(states) and states[j] == states[i]:
+            j += 1
+        t0 = start + timedelta(hours=i * slot_h)
+        t1 = start + timedelta(hours=j * slot_h)
+        st = states[i]
+        segments.append(
+            {
+                "t0": t0.isoformat(timespec="minutes"),
+                "t1": t1.isoformat(timespec="minutes"),
+                "state": st.lower(),
+                "label": st,
+                "color": colors.get(st, "#78909c"),
+                "hours": round((j - i) * slot_h, 2),
+            }
+        )
+        i = j
+    return segments
 
 
 def _metric_risk_level(value: float, warn: float, crit: float, *, higher_is_worse: bool = True) -> str:
@@ -3183,13 +4083,11 @@ def build_pdf(options: dict[str, Any]) -> bytes:
             except Exception:
                 canvas.setFont("Helvetica-Bold", 9)
                 canvas.setFillColor(colors.white)
-                canvas.drawString(14 * mm, height - 11 * mm, "Schneider Electric | AVEVA")
+                canvas.drawString(14 * mm, height - 11 * mm, "AAST")
         else:
             canvas.setFont("Helvetica-Bold", 9)
-            canvas.setFillColor(colors.HexColor("#54e6a8"))
-            canvas.drawString(14 * mm, height - 11 * mm, "Schneider Electric")
-            canvas.setFillColor(colors.HexColor("#c4b5fd"))
-            canvas.drawString(52 * mm, height - 11 * mm, "| AVEVA")
+            canvas.setFillColor(colors.white)
+            canvas.drawString(14 * mm, height - 11 * mm, "AAST")
 
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(colors.HexColor("#94a3b8"))
@@ -3555,8 +4453,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
-        request = urlparse(self.path)
-        query = parse_qs(request.query)
+        # Use module-qualified names so a future local import cannot shadow urlparse.
+        request = urllib.parse.urlparse(self.path)
+        query = urllib.parse.parse_qs(request.query)
 
         if request.path == "/api/state":
             with LOCK:
@@ -3630,6 +4529,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if request.path == "/api/executive":
             self.send_json(build_executive_payload())
+            return
+
+        if request.path == "/api/sustainability":
+            self.send_json(build_sustainability_payload())
+            return
+
+        if request.path == "/api/oee":
+            window = (query.get("window") or ["12h"])[0]
+            self.send_json(build_oee_payload(window=window))
             return
 
         if request.path == "/api/analytics":
@@ -3785,16 +4693,86 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         super().do_GET()
 
+    def do_POST(self) -> None:
+        request = urllib.parse.urlparse(self.path)
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length > 2_500_000:
+            self.send_json({"ok": False, "granted": False, "message": "Access denied"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+            return
+        raw = self.rfile.read(length) if length else b""
+        if request.path == "/api/face":
+            self._check_face(raw)
+            return
+        if request.path != "/api/login":
+            self.send_json({"ok": False, "error": "Not found"}, HTTPStatus.NOT_FOUND)
+            return
+        try:
+            data = json.loads(raw.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self.send_json({"ok": False, "error": "Invalid request"}, HTTPStatus.BAD_REQUEST)
+            return
+        username = str(data.get("username") or "").strip()
+        password = str(data.get("password") or "")
+        if not _same_secret(username, LOGIN_USERNAME) or not _same_secret(password, LOGIN_PASSWORD):
+            self.send_json({"ok": False, "error": "Wrong username or password"}, HTTPStatus.UNAUTHORIZED)
+            return
+        self.send_json({"ok": True, "username": LOGIN_USERNAME})
+
+    def _check_face(self, raw: bytes) -> None:
+        denied = {"granted": False, "name": None, "role": None, "score": None, "message": "Access denied"}
+        if not raw:
+            self.send_json(denied)
+            return
+        face_request = urllib.request.Request(
+            FACE_SERVICE_URL,
+            data=raw,
+            method="POST",
+            headers={"Content-Type": "image/jpeg"},
+        )
+        try:
+            with urllib.request.urlopen(face_request, timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception:
+            payload = denied
+        self.send_json(payload)
+
+
+def _same_secret(left: str, right: str) -> bool:
+    a = left.encode("utf-8")
+    b = right.encode("utf-8")
+    if len(a) != len(b):
+        return False
+    return hmac.compare_digest(a, b)
+
 
 # ============================================================
 # ENTRY POINT
 # ============================================================
 
 
+def start_face_service() -> None:
+    if not FACE_PYTHON.is_file():
+        print("OpenCV face service skipped: project venv was not found.")
+        return
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8003/health", timeout=0.4) as response:
+            if response.status == 200:
+                print("OpenCV face service already running on port 8003.")
+                return
+    except Exception:
+        pass
+    subprocess.Popen(
+        [str(FACE_PYTHON), "-u", str(ROOT / "face_service.py")],
+        cwd=str(ROOT),
+    )
+    print("Starting OpenCV face recognition on http://127.0.0.1:8003/health")
+
+
 def main() -> None:
     print("=" * 72)
     print("DATA CENTER DASHBOARD — IT System Performance LIVE (SQL Express)")
     print("=" * 72)
+    start_face_service()
     test_database_connection()
     if db_connected:
         # Prefer dataset playback when table exists; otherwise read whatever is present

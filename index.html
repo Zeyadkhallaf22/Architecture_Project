@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Data Center — Control Room</title>
+<script>
+if (!sessionStorage.getItem("dc-login-user")) location.replace("/login.html");
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@200;300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -44,6 +47,9 @@ html[data-theme="light"]{
   --accent:#0b6d8f; --accent-2:#0f8f5b;
   --shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 24px -14px rgba(20,30,40,.25);
   --hall-bg:none;
+  --frame:1px solid #c5d3e0;
+  --frame-soft:1px solid #d7e1eb;
+  --frame-glow:0 1px 0 rgba(255,255,255,.7) inset, 0 8px 20px -12px rgba(20,30,40,.18);
 }
 
 *{box-sizing:border-box; margin:0; padding:0;}
@@ -84,6 +90,36 @@ button{ font-family:inherit; cursor:pointer; }
   position:sticky; top:0; height:100vh; overflow-y:auto;
   backdrop-filter:blur(16px) saturate(1.15);
   box-shadow:4px 0 40px rgba(0,0,0,.25), inset -1px 0 0 rgba(255,255,255,.04);
+}
+html[data-theme="light"] .sidebar{
+  background:rgba(255,255,255,.94);
+  border-right:1px solid var(--border);
+  box-shadow:2px 0 20px -10px rgba(20,30,40,.15);
+}
+html[data-theme="light"] .brand-logo-wrap{
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  box-shadow:none;
+}
+html[data-theme="light"] .brand h1{ text-shadow:none; }
+html[data-theme="light"] .brand-logo{ filter:none; }
+html[data-theme="light"] .topbar h2{
+  color:var(--text);
+  text-shadow:none;
+}
+html[data-theme="light"] .pill{
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+}
+html[data-theme="light"] .btn{
+  background:var(--panel);
+  border:1px solid var(--border);
+}
+html[data-theme="light"] .panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
 }
 .brand{ padding:2px 6px 18px; }
 .brand-logo-wrap{
@@ -136,6 +172,20 @@ button{ font-family:inherit; cursor:pointer; }
 .navitem .dot{ margin-left:auto; width:7px; height:7px; border-radius:50%; }
 .navitem .badge{ margin-left:auto; font-family:var(--font-mono); font-size:10.5px; font-weight:700; background:var(--crit); color:#fff; border-radius:20px; padding:1px 7px; }
 .navitem .badge.zero{ background:var(--panel-2); color:var(--text-faint); }
+.nav-servers-toggle .nav-chevron{
+  margin-left:auto; font-size:11px; opacity:.7; transition:transform .15s ease;
+}
+.nav-servers-toggle[aria-expanded="true"] .nav-chevron{ transform:rotate(180deg); }
+.nav-servers-toggle.active{ background:var(--info-soft); color:var(--accent); border-color:color-mix(in srgb, var(--accent) 30%, transparent); font-weight:600; }
+.nav-servers-menu{
+  display:flex; flex-direction:column; gap:2px;
+  margin:2px 0 4px 8px; padding:4px 0 4px 8px;
+  border-left:2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.nav-servers-menu[hidden]{ display:none !important; }
+.nav-server-child{
+  padding:7px 10px; font-size:12.5px;
+}
 
 .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid var(--border-soft); }
 .theme-row{ display:flex; align-items:center; justify-content:space-between; padding:6px 10px; }
@@ -400,13 +450,23 @@ table.dt tr:last-child td{ border-bottom:none; }
 .loading-inline{ font-size:12px; color:var(--text-faint); padding:20px; text-align:center; }
 
 /* ---- Top Level Management — SCADA / mission-control skin ---- */
-#view-summary{
+#view-summary,
+#view-sustain,
+#view-oee{
   --tlm-orange:#ff8a3d;
   --tlm-cyan:#3de0ff;
   --tlm-magenta:#ff4d9a;
   --tlm-lime:#54e6a8;
   --tlm-amber:#ffd166;
   --tlm-red:#ff5a5a;
+  position:relative;
+  isolation:isolate;
+  padding-bottom:10px;
+}
+/* Dark SCADA tokens only when dark theme is active */
+html[data-theme="dark"] #view-summary,
+html[data-theme="dark"] #view-sustain,
+html[data-theme="dark"] #view-oee{
   --tlm-glass:rgba(6,14,24,.36);
   --tlm-glass-2:rgba(8,18,30,.28);
   --tlm-line:rgba(255,255,255,.08);
@@ -418,19 +478,141 @@ table.dt tr:last-child td{ border-bottom:none; }
   --text:#e8f4ff;
   --text-dim:#8eb0c8;
   --text-faint:#5f7f99;
-  position:relative;
-  isolation:isolate;
-  padding-bottom:10px;
 }
-#view-summary::before{ display:none; }
-body.tlm-scada .main{ background:transparent; }
-body.tlm-scada .topbar h2{ /* inherits global thin neon title */ }
-body.tlm-scada .topbar .sub{ font-weight:300; letter-spacing:.04em; color:#6f91aa; }
-body.tlm-scada .topbar .pill{
+html[data-theme="light"] #view-summary,
+html[data-theme="light"] #view-sustain,
+html[data-theme="light"] #view-oee{
+  --tlm-orange:#c45e12;
+  --tlm-cyan:#0b6d8f;
+  --tlm-magenta:#b8326e;
+  --tlm-lime:#0f8f5b;
+  --tlm-amber:#b8860b;
+  --tlm-red:#c62828;
+  --tlm-glass:rgba(255,255,255,.94);
+  --tlm-glass-2:#f4f7fa;
+  --tlm-line:#c5d3e0;
+  --tlm-line-soft:#d7e1eb;
+  /* inherit --panel/--text/--border from html[data-theme=light] */
+}
+html[data-theme="light"] .tlm-card h4,
+html[data-theme="light"] .sust-cc-card h4,
+html[data-theme="light"] .oee-cc-card h4{
+  color:var(--text);
+}
+html[data-theme="light"] .tlm-kpi .lbl{
+  color:var(--text-faint);
+}
+html[data-theme="light"] .tlm-kpi .val{
+  text-shadow:none;
+}
+html[data-theme="light"] body.tlm-scada .topbar h2{
+  color:var(--text);
+  text-shadow:none;
+}
+html[data-theme="light"] .sust-cc-card,
+html[data-theme="light"] .oee-cc-card,
+html[data-theme="light"] .tlm-kpi,
+html[data-theme="light"] .tlm-card{
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  backdrop-filter:none;
+  background:var(--panel);
+}
+/* Capacity Headroom: drop dark hall photo / glass in light mode */
+html[data-theme="light"] .tlm-card.tlm-hero-bg::before{
+  display:none;
+}
+html[data-theme="light"] .tlm-gauge{
+  background:var(--panel-2);
+  border:1px solid var(--border-soft);
+}
+html[data-theme="light"] .tlm-gauge .g-val{ text-shadow:none; }
+html[data-theme="light"] .tlm-rank .name{ color:var(--text); }
+html[data-theme="light"] .tlm-rank .score{ text-shadow:none; }
+html[data-theme="light"] .tlm-legend span{
+  background:var(--panel-2);
+  border:1px solid var(--border-soft);
+}
+html[data-theme="light"] .tlm-heat .srv{ color:var(--text-dim); }
+html[data-theme="light"] .tlm-heat td{
+  color:var(--text);
+  box-shadow:none;
+}
+html[data-theme="light"] .tlm-heat td.ok{
+  background:color-mix(in srgb, var(--tlm-lime) 22%, #fff);
+  color:#0b5c3a;
+  box-shadow:none;
+}
+html[data-theme="light"] .tlm-heat td.warn{
+  background:color-mix(in srgb, var(--tlm-amber) 28%, #fff);
+  color:#7a5a00;
+  box-shadow:none;
+}
+html[data-theme="light"] .tlm-heat td.crit{
+  background:color-mix(in srgb, var(--tlm-red) 22%, #fff);
+  color:#8b1a1a;
+  box-shadow:none;
+}
+html[data-theme="light"] #view-summary .kpi-card{
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+}
+html[data-theme="light"] #view-summary .panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  backdrop-filter:none;
+}
+html[data-theme="light"] .tlm-strip{
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  box-shadow:var(--shadow);
+  backdrop-filter:none;
+}
+html[data-theme="light"] .tlm-strip .glow,
+html[data-theme="light"] .tlm-strip .glow-o{ text-shadow:none; }
+html[data-theme="light"] .tlm-alarm-toggle .fchip{
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+}
+html[data-theme="light"] .pill{
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  box-shadow:var(--shadow);
+  backdrop-filter:none;
+}
+html[data-theme="light"] .btn{
+  background:var(--panel);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+}
+html[data-theme="light"] .topbar h2{
+  color:var(--text);
+  text-shadow:none;
+}
+#view-summary::before,
+#view-sustain::before,
+#view-oee::before{ display:none; }
+html[data-theme="dark"] body.tlm-scada .main{ background:transparent; }
+html[data-theme="light"] body.tlm-scada .main{ background:var(--bg); }
+body.tlm-scada .main:has(#view-sustain.active){ padding:12px 14px 28px; }
+html[data-theme="dark"] body.tlm-scada .topbar .sub{ font-weight:300; letter-spacing:.04em; color:#6f91aa; }
+html[data-theme="light"] body.tlm-scada .topbar .sub{ color:var(--text-faint); }
+html[data-theme="dark"] body.tlm-scada .topbar .pill{
   font-weight:400;
   background:rgba(6,14,24,.35);
   border:var(--frame);
   backdrop-filter:blur(10px);
+}
+html[data-theme="light"] body.tlm-scada .topbar .pill{
+  font-weight:500;
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--text-dim);
 }
 
 .tlm-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
@@ -653,6 +835,417 @@ body.tlm-scada .topbar .pill{
   .tlm-gauge-grid{ grid-template-columns:1fr; }
 }
 
+/* ---- Sustainability Command Center (readable, frame-fitted) ---- */
+#view-sustain{
+  margin:0;
+  padding-bottom:4px;
+}
+#view-sustain .sust-cc-header{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:4px; margin-bottom:10px;
+}
+#view-sustain .sust-cc-header h3{
+  font-family:'Exo 2',sans-serif; font-size:18px; font-weight:400;
+  letter-spacing:.1em; text-transform:uppercase; margin:0; color:var(--text);
+  text-shadow:0 0 16px rgba(84,230,168,.18);
+}
+html[data-theme="light"] #view-sustain .sust-cc-header h3{ text-shadow:none; }
+#view-sustain .sust-cc-header .sub{
+  font-size:12px; font-weight:500; letter-spacing:.04em; color:var(--tlm-lime);
+}
+
+.sust-cc-row1{
+  display:grid; grid-template-columns:2fr 3fr; gap:8px; margin-bottom:8px;
+  align-items:stretch;
+}
+.sust-cc-row2,
+.sust-cc-row3{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:8px;
+  align-items:stretch;
+}
+.sust-cc-card{
+  background:var(--tlm-glass); border:var(--frame); border-radius:10px;
+  box-shadow:var(--frame-glow); padding:12px 14px;
+  backdrop-filter:blur(14px) saturate(1.15);
+  display:flex; flex-direction:column; min-height:0;
+}
+.sust-cc-card h4{
+  font-family:'Exo 2',sans-serif; font-size:13px; font-weight:500;
+  letter-spacing:.08em; text-transform:uppercase; margin:0 0 2px; color:var(--text);
+}
+.sust-cc-card .sub{
+  font-size:12px; font-weight:400; color:var(--text-faint); margin-bottom:8px; line-height:1.35;
+}
+
+.sust-cc-gauges{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; flex:1;
+  align-items:stretch; justify-items:stretch; min-height:160px;
+}
+.sust-gauge{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  padding:0 2px; width:100%; max-width:none; min-width:0; min-height:0;
+}
+.sust-gauge .g-canvas-wrap{
+  width:100%; flex:1 1 auto; min-height:120px; position:relative;
+}
+.sust-gauge canvas{ width:100%; height:100%; display:block; }
+.sust-gauge .g-name{
+  font-family:'Exo 2',sans-serif; font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--text-dim); margin-top:2px; font-weight:500;
+}
+.sust-gauge .g-target{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.sust-gauge .g-warn{
+  font-size:10.5px; color:var(--text-faint); margin-top:1px; line-height:1.3;
+  max-width:100%;
+}
+.sust-gauge .g-warn.active{ color:var(--tlm-amber); font-weight:600; }
+.sust-gauge .g-warn.poor{ color:var(--tlm-red); font-weight:600; }
+.sust-gauge .g-hint{
+  font-size:10px; font-weight:400; color:var(--text-faint); margin-top:3px;
+  line-height:1.35; max-width:100%;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.sust-gauge .g-status{
+  font-size:11px; font-weight:600; margin-top:2px; color:var(--tlm-lime);
+  max-width:100%; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sust-gauge .g-status.watch{ color:var(--tlm-amber); }
+.sust-gauge .g-status.poor{ color:var(--tlm-red); }
+.sust-gauge .g-status.unknown{ color:var(--text-dim); }
+
+.sust-cc-split{
+  display:grid; grid-template-columns:1fr 1.2fr; gap:8px; flex:1;
+  min-height:200px;
+}
+.sust-cc-split .pane{ display:flex; flex-direction:column; min-height:0; }
+.sust-cc-split .pane .chart-wrap{
+  flex:1 1 auto; min-height:120px; position:relative; width:100%;
+}
+.sust-cc-split .pane .chart-wrap canvas{ width:100%; height:100%; display:block; }
+
+.sust-cc-canvas{ position:relative; width:100%; flex:1 1 auto; min-height:120px; }
+.sust-cc-canvas canvas{ width:100%; height:100%; display:block; }
+.sust-cc-canvas.tall{ min-height:130px; }
+
+.sust-pie-wrap{
+  position:relative; width:100%; flex:1 1 auto; min-height:120px;
+}
+.sust-pie-wrap canvas{ width:100%; height:100%; display:block; }
+#view-sustain .tlm-legend{
+  display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px;
+  font-size:12px; line-height:1.4;
+}
+#view-sustain .tlm-legend > span{
+  display:inline-flex; align-items:center; gap:6px; margin:0;
+  color:var(--text-dim);
+}
+#view-sustain .tlm-legend i{
+  width:9px; height:9px; border-radius:2px; display:inline-block; flex-shrink:0;
+}
+#view-sustain .tlm-legend b{
+  font-family:var(--font-mono); font-weight:600; color:var(--text); font-size:12px;
+}
+
+.sust-erf-body{
+  flex:1; display:grid; grid-template-columns:auto 1fr; gap:10px 12px;
+  align-items:center; min-height:0;
+}
+.sust-erf-pct{
+  font-family:'Exo 2',var(--font-mono),sans-serif;
+  font-size:40px; font-weight:300; color:var(--tlm-lime);
+  text-shadow:0 0 16px rgba(84,230,168,.35); line-height:1;
+}
+html[data-theme="light"] .sust-erf-pct{ text-shadow:none; }
+.sust-erf-detail{ font-size:12px; color:var(--text-dim); line-height:1.4; grid-column:1 / -1; }
+.sust-erf-flow{
+  display:flex; align-items:center; justify-content:space-between; gap:6px;
+  padding:10px 12px; border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--tlm-lime) 30%, transparent);
+  background:color-mix(in srgb, var(--tlm-lime) 8%, transparent);
+  font-size:12px; color:var(--text-dim); letter-spacing:.02em;
+}
+.sust-erf-flow b{ color:var(--tlm-cyan); font-weight:600; }
+
+.sust-ewaste{ list-style:none; margin:0; padding:0; display:grid; gap:8px; flex:1; }
+.sust-ewaste li{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+  background:var(--panel-2); font-size:13px; color:var(--text-dim);
+}
+.sust-ewaste .mark{
+  width:20px; height:20px; border-radius:50%; display:inline-flex;
+  align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0;
+}
+.sust-ewaste .mark.ok{ color:var(--tlm-lime); background:color-mix(in srgb, var(--tlm-lime) 14%, transparent); border:1px solid color-mix(in srgb, var(--tlm-lime) 35%, transparent); }
+.sust-ewaste .mark.bad{ color:var(--tlm-red); background:color-mix(in srgb, var(--tlm-red) 12%, transparent); border:1px solid color-mix(in srgb, var(--tlm-red) 35%, transparent); }
+.sust-ewaste .val{ font-family:var(--font-mono); color:var(--text); font-weight:600; }
+
+.sust-thermal{
+  display:grid; grid-template-columns:1fr 1fr; gap:6px; flex:1;
+}
+.sust-thermal .cell{
+  border-radius:8px; border:1px solid var(--border);
+  padding:10px 8px; text-align:center; min-height:68px;
+  display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.sust-thermal .cell.ok{ background:color-mix(in srgb, var(--tlm-lime) 12%, transparent); border-color:color-mix(in srgb, var(--tlm-lime) 35%, transparent); }
+.sust-thermal .cell.watch{ background:color-mix(in srgb, var(--tlm-amber) 14%, transparent); border-color:color-mix(in srgb, var(--tlm-amber) 40%, transparent); }
+.sust-thermal .cell.crit{ background:color-mix(in srgb, var(--tlm-red) 14%, transparent); border-color:color-mix(in srgb, var(--tlm-red) 40%, transparent); }
+.sust-thermal .cell.off{ background:var(--panel-2); opacity:.75; }
+.sust-thermal .cell .lbl{ font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); }
+.sust-thermal .cell .tmp{
+  font-family:'Exo 2',var(--font-mono),sans-serif;
+  font-size:18px; font-weight:400; color:var(--text);
+}
+
+.sust-cc-footer{
+  display:grid;
+  grid-template-columns:minmax(160px,1.2fr) auto auto;
+  gap:8px; align-items:center;
+  margin-top:4px; margin-bottom:4px;
+}
+.sust-alert{
+  min-width:0; padding:10px 12px; border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--tlm-red) 40%, transparent);
+  background:color-mix(in srgb, var(--tlm-red) 12%, transparent);
+  color:var(--tlm-red); font-size:12px; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sust-alert.info{
+  border-color:color-mix(in srgb, var(--tlm-lime) 35%, transparent);
+  background:color-mix(in srgb, var(--tlm-lime) 10%, transparent);
+  color:var(--tlm-lime);
+}
+.sust-alert.warn{
+  border-color:color-mix(in srgb, var(--tlm-amber) 40%, transparent);
+  background:color-mix(in srgb, var(--tlm-amber) 12%, transparent);
+  color:var(--tlm-amber);
+}
+.sust-pills{ display:flex; flex-wrap:nowrap; gap:6px; align-items:center; justify-content:center; }
+.sust-pill{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px;
+  background:var(--panel-2); border:1px solid var(--border);
+  font-size:11px; letter-spacing:.03em; color:var(--text-dim); white-space:nowrap;
+}
+.sust-pill b{ font-family:var(--font-mono); color:var(--text); font-weight:600; }
+.sust-pill .dot{ width:6px; height:6px; border-radius:50%; background:var(--tlm-lime); box-shadow:0 0 8px color-mix(in srgb, var(--tlm-lime) 60%, transparent); }
+.sust-pill .dot.watch{ background:var(--tlm-amber); }
+.sust-pill .dot.poor{ background:var(--tlm-red); }
+.sust-pill .dot.unknown{ background:var(--text-faint); box-shadow:none; }
+
+.sust-cc-status{
+  display:flex; flex-direction:column; align-items:flex-end; gap:2px;
+  padding:8px 12px; background:var(--tlm-glass); border:var(--frame);
+  border-radius:8px; box-shadow:var(--frame-glow); backdrop-filter:blur(10px);
+  min-width:0; white-space:nowrap;
+}
+.sust-cc-status .ok-line{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; font-weight:600; color:var(--tlm-lime);
+}
+.sust-cc-status .ok-line.warn{ color:var(--tlm-amber); }
+.sust-cc-status .ok-line.bad{ color:var(--tlm-red); }
+.sust-cc-status .ok-dot{
+  width:7px; height:7px; border-radius:50%; background:currentColor;
+  box-shadow:0 0 8px currentColor;
+}
+.sust-cc-status .ts{ font-size:11px; color:var(--text-faint); font-family:var(--font-mono); }
+
+.sust-cc-note{
+  font-size:11px; color:var(--text-faint); line-height:1.4; font-weight:400;
+  margin-top:6px; padding-top:8px; border-top:1px solid var(--border-soft);
+}
+
+/* ---- OEE Equipment Effectiveness (one-screen AVEVA grid) ---- */
+body.tlm-scada .main:has(#view-oee.active){
+  padding:8px 12px 10px;
+  overflow:hidden;
+}
+#view-oee.active{
+  height:calc(100vh - 78px);
+  max-height:calc(100vh - 78px);
+  overflow:hidden;
+  display:flex !important; /* beat .view.active { display:block } */
+  flex-direction:column;
+  margin:0; padding:0; padding-bottom:0;
+  box-sizing:border-box;
+}
+#view-oee .oee-shell{
+  flex:1; min-height:0;
+  display:flex; flex-direction:column; gap:6px;
+}
+#view-oee .oee-cc-header{
+  display:flex; flex-wrap:nowrap; align-items:center; justify-content:space-between;
+  gap:8px 12px; flex:0 0 auto; margin:0;
+}
+#view-oee .oee-cc-header .titles{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+#view-oee .oee-cc-header h3{
+  font-family:'Exo 2',sans-serif; font-size:14px; font-weight:400;
+  letter-spacing:.08em; text-transform:uppercase; margin:0; color:var(--text);
+}
+#view-oee .oee-cc-header .sub{
+  font-size:10.5px; font-weight:500; letter-spacing:.03em; color:var(--tlm-cyan);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.oee-header-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.oee-range{
+  display:inline-flex; gap:3px; padding:2px; border-radius:8px;
+  border:1px solid var(--border); background:var(--panel-2);
+}
+.oee-range button{
+  border:0; background:transparent; color:var(--text-dim);
+  font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  padding:5px 10px; border-radius:6px; cursor:pointer;
+}
+.oee-range button.active{
+  background:color-mix(in srgb, var(--tlm-cyan) 22%, transparent);
+  color:var(--text); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tlm-cyan) 40%, transparent);
+}
+.oee-live-chip{
+  font-size:10.5px; font-weight:600; padding:5px 10px; border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--tlm-lime) 35%, transparent);
+  background:color-mix(in srgb, var(--tlm-lime) 10%, transparent);
+  color:var(--tlm-lime); white-space:nowrap; max-width:280px;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.oee-live-chip.warn{
+  border-color:color-mix(in srgb, var(--tlm-amber) 40%, transparent);
+  background:color-mix(in srgb, var(--tlm-amber) 12%, transparent);
+  color:var(--tlm-amber);
+}
+.oee-live-chip.bad{
+  border-color:color-mix(in srgb, var(--tlm-red) 40%, transparent);
+  background:color-mix(in srgb, var(--tlm-red) 12%, transparent);
+  color:var(--tlm-red);
+}
+
+.oee-grid{
+  flex:1; min-height:0;
+  display:grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1fr);
+  gap:6px;
+}
+.oee-row{
+  min-height:0; display:grid; gap:6px; align-items:stretch;
+}
+.oee-row-top{ grid-template-columns: minmax(160px, 1fr) minmax(0, 2.4fr); }
+.oee-row-mid{ grid-template-columns: 1fr 1fr; }
+.oee-row-bot{ grid-template-columns: repeat(3, 1fr); }
+
+.oee-cc-card{
+  background:var(--tlm-glass); border:var(--frame); border-radius:10px;
+  box-shadow:var(--frame-glow); padding:8px 10px;
+  backdrop-filter:blur(14px) saturate(1.15);
+  display:flex; flex-direction:column; min-height:0; overflow:hidden;
+}
+.oee-cc-card h4{
+  font-family:'Exo 2',sans-serif; font-size:11px; font-weight:500;
+  letter-spacing:.08em; text-transform:uppercase; margin:0 0 1px; color:var(--text);
+}
+.oee-cc-card .sub{
+  font-size:10px; font-weight:400; color:var(--text-faint); margin-bottom:4px; line-height:1.25;
+}
+
+.oee-card-head{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+  flex:0 0 auto; margin-bottom:4px;
+}
+.oee-card-head .sub{ margin-bottom:0; }
+.oee-insight-pills{
+  display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end;
+  max-width:58%;
+}
+.oee-insight-pills .sust-pill{
+  font-size:9.5px; padding:3px 7px; gap:4px;
+}
+.oee-insight-pills .sust-pill .dot{ width:5px; height:5px; }
+
+.oee-timeline-card{
+  min-height:0;
+  display:flex; flex-direction:column;
+}
+.oee-timeline-card .oee-canvas-wrap.timeline{
+  flex:1 1 auto; min-height:0;
+  display:flex; align-items:stretch;
+}
+.oee-canvas-wrap{
+  position:relative; width:100%; flex:1 1 auto; min-height:0;
+}
+.oee-canvas-wrap canvas{ width:100%; height:100%; display:block; }
+.oee-canvas-wrap.reasons{ min-height:0; flex:1 1 auto; }
+.oee-row-mid .oee-cc-card{ padding:8px 10px 6px; }
+.oee-row-mid .oee-cc-card .sub{ margin-bottom:2px; }
+.oee-timeline-legend{
+  display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:4px; flex:0 0 auto;
+  font-size:10px; color:var(--text-dim);
+}
+.oee-timeline-legend span{ display:inline-flex; align-items:center; gap:4px; }
+.oee-timeline-legend i{
+  width:8px; height:8px; border-radius:2px; display:inline-block;
+}
+
+.oee-gauge{
+  display:grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items:stretch; text-align:center;
+  min-width:0; min-height:0; padding:6px 8px 8px;
+}
+.oee-gauge-hero{ padding:8px 10px 10px; }
+.oee-gauge .g-canvas-wrap{
+  width:100%; min-height:0; height:auto; position:relative;
+  margin:0; flex:1 1 auto;
+}
+.oee-gauge canvas{ width:100%; height:100%; display:block; }
+.oee-gauge .g-meta{
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:center;
+  gap:1px; margin-top:2px; min-width:0; width:100%;
+}
+.oee-gauge .g-name{
+  font-family:'Exo 2',sans-serif; font-size:10.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--text-dim); font-weight:500;
+}
+.oee-gauge .g-note{
+  font-size:9px; color:var(--text-faint);
+  max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.oee-gauge .g-target{ font-size:9.5px; color:var(--text-faint); }
+.oee-gauge .g-warn{ font-size:9.5px; color:var(--text-faint); }
+.oee-gauge .g-warn.active{ color:var(--tlm-amber); font-weight:600; }
+.oee-gauge .g-warn.poor{ color:var(--tlm-red); font-weight:600; }
+.oee-gauge .g-status{
+  font-size:10.5px; font-weight:600; color:var(--tlm-lime);
+  max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.oee-gauge .g-status.watch{ color:var(--tlm-amber); }
+.oee-gauge .g-status.poor{ color:var(--tlm-red); }
+.oee-gauge .g-status.unknown{ color:var(--text-dim); }
+
+@media (max-width:1100px){
+  #view-oee.active{ height:auto; max-height:none; overflow:auto; }
+  body.tlm-scada .main:has(#view-oee.active){ overflow:auto; }
+  .oee-row-top{ grid-template-columns:1fr; }
+  .oee-row-mid{ grid-template-columns:1fr; }
+  .oee-row-bot{ grid-template-columns:1fr 1fr 1fr; }
+  .oee-grid{ grid-template-rows:auto; height:auto; }
+  .oee-gauge .g-canvas-wrap{ min-height:100px; }
+}
+
+@media (max-width:900px){
+  .sust-cc-split{ grid-template-columns:1fr; min-height:0; }
+  .sust-cc-split .pane .chart-wrap{ min-height:120px; }
+}
+@media (max-width:700px){
+  .sust-cc-row1,
+  .sust-cc-row2,
+  .sust-cc-row3{ grid-template-columns:1fr; }
+  .sust-cc-gauges{ grid-template-columns:repeat(3, 1fr); }
+  .sust-cc-footer{ grid-template-columns:1fr; }
+  .sust-pills{ flex-wrap:wrap; justify-content:flex-start; }
+  .sust-cc-status{ align-items:flex-start; }
+  .sust-erf-body{ grid-template-columns:1fr; }
+}
+
 .spark-wrap{ margin:2px 0 10px; }
 .spark-wrap .lbl{ font-size:9.5px; color:var(--text-faint); font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px; display:flex; justify-content:space-between; }
 canvas.spark{ width:100%; height:28px; display:block; }
@@ -802,6 +1395,29 @@ canvas.spark{ width:100%; height:28px; display:block; }
 }
 .ai-widget-head b{ font-family:var(--font-display); font-size:13px; }
 .ai-widget-body{ padding:12px 14px 14px; max-height:360px; overflow:auto; }
+.chat-sidebar{
+  position:fixed; top:0; right:0; z-index:80; width:min(440px, 100%); height:100vh;
+  display:flex; flex-direction:column; background:var(--panel);
+  border-left:1px solid var(--border); box-shadow:var(--shadow);
+}
+.chat-sidebar[hidden]{ display:none !important; }
+.chat-sidebar.maximized{ width:100%; }
+.chat-sidebar-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 14px; border-bottom:1px solid var(--border-soft); background:var(--panel-2);
+}
+.chat-sidebar-actions{ display:flex; align-items:center; gap:8px; }
+.chat-sidebar-head b{ font-family:var(--font-display); font-size:14px; }
+.chat-sidebar iframe{ flex:1; width:100%; border:0; background:#0c1218; }
+.vision-layout{ display:grid; grid-template-columns:minmax(280px, 1.2fr) minmax(240px, .8fr); gap:16px; }
+.vision-frame{
+  width:100%; min-height:280px; background:#070b14; border-radius:12px; object-fit:contain;
+}
+.vision-offline{ color:var(--text-faint); margin-top:10px; }
+.vision-stat{ margin-bottom:12px; }
+.vision-stat .lbl{ font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); }
+.vision-stat .val{ font-size:18px; font-weight:700; margin-top:4px; }
+@media (max-width:900px){ .vision-layout{ grid-template-columns:1fr; } }
 .ai-q{
   display:block; width:100%; text-align:left; margin-bottom:7px;
   padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
@@ -823,7 +1439,7 @@ canvas.spark{ width:100%; height:28px; display:block; }
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-logo-wrap">
-        <img class="brand-logo" src="/assets/schneider-aveva-logo.png?v=2" alt="Schneider Electric | AVEVA" />
+        <img class="brand-logo" src="/assets/aast-logo.png?v=1" alt="Arab Academy for Science, Technology and Maritime Transport" />
       </div>
       <h1>Data Center</h1>
       <p>Real-time monitoring · SQL-backed controls</p>
@@ -833,20 +1449,28 @@ canvas.spark{ width:100%; height:28px; display:block; }
     <div class="navgroup">
       <div class="label">Executive</div>
       <button class="navitem active" data-view="summary"><span class="ic">▦</span> TOP LEVEL MANAGEMENT</button>
+      <button class="navitem" data-view="sustain"><span class="ic">◈</span> Sustainability</button>
+      <button class="navitem" data-view="oee"><span class="ic">◎</span> OEE</button>
     </div>
 
     <div class="navgroup">
       <div class="label">Navigation</div>
       <button class="navitem" data-view="overview"><span class="ic">▤</span> Overview</button>
-      <button class="navitem" data-view="server" data-server="1"><span class="ic">▢</span> Server 1 <span class="dot" id="nav-dot-1"></span></button>
-      <button class="navitem" data-view="server" data-server="2"><span class="ic">▢</span> Server 2 <span class="dot" id="nav-dot-2"></span></button>
-      <button class="navitem" data-view="server" data-server="3"><span class="ic">▢</span> Server 3 <span class="dot" id="nav-dot-3"></span></button>
-      <button class="navitem" data-view="server" data-server="4"><span class="ic">▢</span> Server 4 <span class="dot" id="nav-dot-4"></span></button>
+      <button type="button" class="navitem nav-servers-toggle" id="navServersToggle" aria-expanded="false">
+        <span class="ic">▢</span> Servers <span class="nav-chevron" id="navServersChevron">▾</span>
+      </button>
+      <div class="nav-servers-menu" id="navServersMenu" hidden>
+        <button class="navitem nav-server-child" data-view="server" data-server="1"><span class="ic">▢</span> Server 1 <span class="dot" id="nav-dot-1"></span></button>
+        <button class="navitem nav-server-child" data-view="server" data-server="2"><span class="ic">▢</span> Server 2 <span class="dot" id="nav-dot-2"></span></button>
+        <button class="navitem nav-server-child" data-view="server" data-server="3"><span class="ic">▢</span> Server 3 <span class="dot" id="nav-dot-3"></span></button>
+        <button class="navitem nav-server-child" data-view="server" data-server="4"><span class="ic">▢</span> Server 4 <span class="dot" id="nav-dot-4"></span></button>
+      </div>
     </div>
 
     <div class="navgroup">
       <div class="label">Intelligence</div>
       <button class="navitem" data-view="ai"><span class="ic">◆</span> AI Analytics</button>
+      <button class="navitem" data-view="vision"><span class="ic">◉</span> Face and gestures</button>
       <button class="navitem" data-view="compare"><span class="ic">⇄</span> Workbench Compare</button>
       <button class="navitem" data-view="wbmon"><span class="ic">∿</span> Workbench Monitor</button>
     </div>
@@ -862,7 +1486,7 @@ canvas.spark{ width:100%; height:28px; display:block; }
         <span class="lbl">Theme</span>
         <button class="themeswitch" id="themeToggle"><span class="knob" id="themeKnob">☀</span></button>
       </div>
-      <p style="font-size:10.5px; color:var(--text-faint); padding:8px 10px 0; line-height:1.5;">Shortcuts: <b>S</b> Top Level Mgmt · <b>1–4</b> servers · <b>O</b> overview · <b>I</b> AI · <b>C</b> compare · <b>W</b> WB monitor · <b>R</b> report · <b>A</b> alarms</p>
+      <p style="font-size:10.5px; color:var(--text-faint); padding:8px 10px 0; line-height:1.5;">Shortcuts: <b>S</b> Top Level Mgmt · <b>U</b> Sustainability · <b>E</b> OEE · <b>1–4</b> servers · <b>O</b> overview · <b>I</b> AI · <b>C</b> compare · <b>W</b> WB monitor · <b>R</b> report · <b>A</b> alarms</p>
     </div>
   </aside>
 
@@ -878,6 +1502,7 @@ canvas.spark{ width:100%; height:28px; display:block; }
         <span class="pill" id="stalePill">no data yet</span>
         <span class="pill down" id="connPill"><span class="dot"></span> Connecting…</span>
         <span class="pill" id="dbStatusPill" title="Database connection status"><span class="dot"></span> DB…</span>
+        <button class="btn" id="chatSidebarBtn">Chat</button>
         <button class="btn" id="refreshBtn">↻ Refresh</button>
         <button class="btn" id="pauseBtn">⏸ Pause Live</button>
       </div>
@@ -1104,6 +1729,213 @@ canvas.spark{ width:100%; height:28px; display:block; }
       </div>
     </section>
 
+    <!-- ===== SUSTAINABILITY COMMAND CENTER ===== -->
+    <section class="view" id="view-sustain">
+      <div class="sust-cc-header">
+        <h3 id="sust-cc-title">Sustainability</h3>
+        <div class="sub" id="sust-cc-subtitle">Modeled real-time KPIs · ISO 14001 / 50001-aligned</div>
+      </div>
+
+      <div class="sust-cc-row1">
+        <div class="sust-cc-card">
+          <h4>Core Efficiency Metrics</h4>
+          <div class="sub">Primary KPIs — PUE · WUE · CUE (live modeled)</div>
+          <div class="sust-cc-gauges">
+            <div class="sust-gauge">
+              <div class="g-canvas-wrap"><canvas id="sust-gauge-pue"></canvas></div>
+              <div class="g-name">PUE</div>
+              <div class="g-target" id="sust-gauge-pue-target">Target: –</div>
+              <div class="g-warn" id="sust-gauge-pue-warn">Warn: –</div>
+              <div class="g-status unknown" id="sust-gauge-pue-status">–</div>
+              <div class="g-hint" id="sust-gauge-pue-hint" title="">–</div>
+            </div>
+            <div class="sust-gauge">
+              <div class="g-canvas-wrap"><canvas id="sust-gauge-wue"></canvas></div>
+              <div class="g-name">WUE</div>
+              <div class="g-target" id="sust-gauge-wue-target">Target: –</div>
+              <div class="g-warn" id="sust-gauge-wue-warn">Warn: –</div>
+              <div class="g-status unknown" id="sust-gauge-wue-status">–</div>
+              <div class="g-hint" id="sust-gauge-wue-hint" title="">–</div>
+            </div>
+            <div class="sust-gauge">
+              <div class="g-canvas-wrap"><canvas id="sust-gauge-cue"></canvas></div>
+              <div class="g-name">CUE</div>
+              <div class="g-target" id="sust-gauge-cue-target">Target: –</div>
+              <div class="g-warn" id="sust-gauge-cue-warn">Warn: –</div>
+              <div class="g-status unknown" id="sust-gauge-cue-status">–</div>
+              <div class="g-hint" id="sust-gauge-cue-hint" title="">–</div>
+            </div>
+          </div>
+        </div>
+        <div class="sust-cc-card">
+          <h4>Carbon &amp; Energy Matching</h4>
+          <div class="sub">Scope emissions + 24/7 CFE vs grid intensity</div>
+          <div class="sust-cc-split">
+            <div class="pane carbon">
+              <div class="sub" style="margin-bottom:2px; text-align:center;">Total carbon (kgCO₂e / h)</div>
+              <div class="chart-wrap"><canvas id="sust-carbon-bars"></canvas></div>
+            </div>
+            <div class="pane cfe">
+              <div class="sub" style="margin-bottom:2px;">24/7 CFE matching (72h)</div>
+              <div class="chart-wrap"><canvas id="sust-cfe-chart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sust-cc-row2">
+        <div class="sust-cc-card">
+          <h4>Power Consumption Trends</h4>
+          <div class="sub" id="sust-power-sub">Last 7 days · Total · IT · Cooling (modeled)</div>
+          <div class="sust-cc-canvas tall"><canvas id="sust-power-trend"></canvas></div>
+        </div>
+        <div class="sust-cc-card">
+          <h4>Renewable Energy Factor</h4>
+          <div class="sub">REF · renewables share</div>
+          <div class="sust-pie-wrap"><canvas id="sust-ref-pie"></canvas></div>
+          <div class="tlm-legend" id="sust-ref-legend"></div>
+          <div class="sub" id="sust-ref-detail" style="margin-top:4px; margin-bottom:0;">–</div>
+        </div>
+        <div class="sust-cc-card">
+          <h4>Energy Reuse Factor</h4>
+          <div class="sub">ERF · waste heat reused</div>
+          <div class="sust-erf-body">
+            <div class="sust-erf-pct" id="sust-erf-pct">–</div>
+            <div class="sust-erf-flow">
+              <span>Servers <b>heat</b></span>
+              <span>→</span>
+              <span>Reuse <b id="sust-erf-kw">–</b> kW</span>
+            </div>
+            <div class="sust-erf-detail" id="sust-erf-detail">–</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sust-cc-row3">
+        <div class="sust-cc-card">
+          <h4>Water Source Breakdown</h4>
+          <div class="sub" id="sust-water-sub">Modeled mix · L/h</div>
+          <div class="sust-pie-wrap"><canvas id="sust-water-pie"></canvas></div>
+          <div class="tlm-legend" id="sust-water-legend"></div>
+        </div>
+        <div class="sust-cc-card">
+          <h4>E-Waste &amp; Battery Management</h4>
+          <div class="sub">Modeled policy KPIs</div>
+          <ul class="sust-ewaste" id="sust-ewaste"></ul>
+        </div>
+        <div class="sust-cc-card">
+          <h4>Air Quality &amp; Cooling</h4>
+          <div class="sub">Live server thermal map</div>
+          <div class="sust-thermal" id="sust-thermal"></div>
+        </div>
+      </div>
+
+      <div class="sust-cc-footer">
+        <div class="sust-alert info" id="sust-alert">Loading sustainability…</div>
+        <div class="sust-pills" id="sust-pills"></div>
+        <div class="sust-cc-status">
+          <div class="ok-line" id="sust-sys-line"><span class="ok-dot"></span> <span id="sust-sys-label">Checking…</span></div>
+          <div class="ts" id="sust-sys-ts">–</div>
+        </div>
+      </div>
+      <div class="sust-cc-note" id="sust-note">Estimated from live fleet tags — not metered PDU/BMS. Methodology cites SCHNEIDER-PUE.</div>
+    </section>
+
+    <!-- ===== OEE EQUIPMENT EFFECTIVENESS ===== -->
+    <section class="view" id="view-oee">
+      <div class="oee-shell">
+        <div class="oee-cc-header">
+          <div class="titles">
+            <h3 id="oee-cc-title">OEE · EQUIPMENT EFFECTIVENESS</h3>
+            <div class="sub" id="oee-cc-subtitle">Infra Availability · Compute Utilization · Job Success · live modeled</div>
+          </div>
+          <div class="oee-header-right">
+            <div class="oee-range" id="oee-range" role="group" aria-label="Time window">
+              <button type="button" data-window="today">Today</button>
+              <button type="button" data-window="12h" class="active">12H</button>
+              <button type="button" data-window="7d">7D</button>
+            </div>
+            <div class="oee-live-chip" id="oee-alert" title="">Loading…</div>
+          </div>
+        </div>
+
+        <div class="oee-grid">
+          <!-- Row 1: Effectiveness + Timeline -->
+          <div class="oee-row oee-row-top">
+            <div class="oee-cc-card oee-gauge oee-gauge-hero">
+              <div class="g-canvas-wrap"><canvas id="oee-gauge-oee"></canvas></div>
+              <div class="g-meta">
+                <div class="g-name" id="oee-gauge-oee-name">Effectiveness</div>
+                <div class="g-note" id="oee-gauge-oee-note">–</div>
+                <div class="g-target" id="oee-gauge-oee-target">Target: –</div>
+                <div class="g-warn" id="oee-gauge-oee-warn">Warn: –</div>
+                <div class="g-status unknown" id="oee-gauge-oee-status">–</div>
+              </div>
+            </div>
+            <div class="oee-cc-card oee-timeline-card">
+              <div class="oee-card-head">
+                <div>
+                  <h4>Utilization Timeline</h4>
+                  <div class="sub" id="oee-timeline-sub">Running · Starved · Fault · Planned · Offline</div>
+                </div>
+                <div class="oee-insight-pills" id="oee-insight-pills"></div>
+              </div>
+              <div class="oee-canvas-wrap timeline"><canvas id="oee-timeline"></canvas></div>
+              <div class="oee-timeline-legend" id="oee-timeline-legend"></div>
+            </div>
+          </div>
+
+          <!-- Row 2: Reasons -->
+          <div class="oee-row oee-row-mid">
+            <div class="oee-cc-card">
+              <h4>Utilization Reasons · Count</h4>
+              <div class="sub">DC insights → AVEVA-style codes</div>
+              <div class="oee-canvas-wrap reasons"><canvas id="oee-reasons-count"></canvas></div>
+            </div>
+            <div class="oee-cc-card">
+              <h4>Utilization Reasons · Duration</h4>
+              <div class="sub">Minutes proxy · same reason map</div>
+              <div class="oee-canvas-wrap reasons"><canvas id="oee-reasons-duration"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Row 3: A / P / Q gauges -->
+          <div class="oee-row oee-row-bot">
+            <div class="oee-cc-card oee-gauge">
+              <div class="g-canvas-wrap"><canvas id="oee-gauge-availability"></canvas></div>
+              <div class="g-meta">
+                <div class="g-name" id="oee-gauge-availability-name">Infra Availability</div>
+                <div class="g-note" id="oee-gauge-availability-note">–</div>
+                <div class="g-target" id="oee-gauge-availability-target">Target: –</div>
+                <div class="g-warn" id="oee-gauge-availability-warn">Warn: –</div>
+                <div class="g-status unknown" id="oee-gauge-availability-status">–</div>
+              </div>
+            </div>
+            <div class="oee-cc-card oee-gauge">
+              <div class="g-canvas-wrap"><canvas id="oee-gauge-performance"></canvas></div>
+              <div class="g-meta">
+                <div class="g-name" id="oee-gauge-performance-name">Compute Utilization</div>
+                <div class="g-note" id="oee-gauge-performance-note">–</div>
+                <div class="g-target" id="oee-gauge-performance-target">Target: –</div>
+                <div class="g-warn" id="oee-gauge-performance-warn">Warn: –</div>
+                <div class="g-status unknown" id="oee-gauge-performance-status">–</div>
+              </div>
+            </div>
+            <div class="oee-cc-card oee-gauge">
+              <div class="g-canvas-wrap"><canvas id="oee-gauge-quality"></canvas></div>
+              <div class="g-meta">
+                <div class="g-name" id="oee-gauge-quality-name">Job Success</div>
+                <div class="g-note" id="oee-gauge-quality-note">–</div>
+                <div class="g-target" id="oee-gauge-quality-target">Target: –</div>
+                <div class="g-warn" id="oee-gauge-quality-warn">Warn: –</div>
+                <div class="g-status unknown" id="oee-gauge-quality-status">–</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== REPORT BUILDER ===== -->
     <section class="view" id="view-report">
       <div class="grid g-2" style="align-items:start;">
@@ -1303,14 +2135,44 @@ canvas.spark{ width:100%; height:28px; display:block; }
       <div id="evt-by-server"></div>
     </section>
 
+    <!-- ===== FACE AND GESTURES ===== -->
+    <section class="view" id="view-vision">
+      <div class="vision-layout">
+        <div class="panel">
+          <h3><span class="ic">◉</span> Camera <span class="hint">from the VisionHMI app on port 8002</span></h3>
+          <img id="visionFrame" class="vision-frame" alt="Face and gesture camera" hidden />
+          <p class="vision-offline" id="visionOffline">Vision app is not running. Start it with <b>.venv\Scripts\python app.py</b> inside SCADAPROJECT.</p>
+        </div>
+        <div class="panel">
+          <h3><span class="ic">◉</span> Recognition</h3>
+          <div class="vision-stat"><div class="lbl">Access</div><div class="val" id="visionLock">Waiting</div></div>
+          <div class="vision-stat"><div class="lbl">Operator</div><div class="val" id="visionUser">—</div></div>
+          <div class="vision-stat"><div class="lbl">Gesture</div><div class="val" id="visionGesture">—</div></div>
+          <div class="vision-stat"><div class="lbl">Simulated section</div><div class="val" id="visionSection">—</div></div>
+          <p class="note">Gestures change the simulated VisionHMI facility only. They do not start or stop the data-center servers on this dashboard.</p>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
+<aside class="chat-sidebar" id="chatSidebar" hidden>
+  <div class="chat-sidebar-head">
+    <b>Operator chatbot</b>
+    <div class="chat-sidebar-actions">
+      <button class="btn sm" type="button" id="chatSidebarMax">Maximize</button>
+      <button class="btn sm" type="button" id="chatSidebarClose">Close</button>
+    </div>
+  </div>
+  <iframe id="chatSidebarFrame" title="SCADA operator chatbot" src="about:blank"></iframe>
+</aside>
+
 <!-- Static AI Q&A widget -->
-<div class="ai-widget" id="aiWidget">
+<div class="ai-widget collapsed" id="aiWidget">
   <div class="ai-widget-head" id="aiWidgetToggle">
     <b>◆ Server AI Assistant</b>
-    <span class="btn sm" id="aiWidgetChevron">−</span>
+    <span class="btn sm" id="aiWidgetChevron">+</span>
   </div>
   <div class="ai-widget-body">
     <div id="aiQuestions"></div>
@@ -1342,7 +2204,7 @@ let lastStateAt = null;
 let lastCompare = null;
 let lastDbStatus = null;
 let lastWbMonitor = null;
-let stateTimer = null, histTimer = null, wbHistTimer = null, analyticsTimer = null;
+let stateTimer = null, histTimer = null, wbHistTimer = null, analyticsTimer = null, sustTimer = null, oeeTimer = null, visionTimer = null;
 const scopeBuffers = {}; // server -> rolling heartbeat sample rows
 const heartbeatTrace = {}; // server -> walking buffer for server detail
 const wbHeartbeatTrace = {}; // server -> walking buffer for workbench monitor
@@ -1355,6 +2217,15 @@ function setTheme(t){
   root.setAttribute('data-theme', t);
   document.getElementById('themeKnob').textContent = t === 'dark' ? '☾' : '☀';
   localStorage.setItem('dc_theme', t);
+  if (typeof currentView !== 'undefined' && currentView === 'sustain' && typeof lastSustData !== 'undefined' && lastSustData){
+    requestAnimationFrame(() => renderSustainability(lastSustData));
+  }
+  if (typeof currentView !== 'undefined' && currentView === 'oee' && typeof lastOeeData !== 'undefined' && lastOeeData){
+    requestAnimationFrame(() => renderOee(lastOeeData));
+  }
+  if (typeof currentView !== 'undefined' && currentView === 'summary' && typeof pullSummary === 'function'){
+    requestAnimationFrame(() => pullSummary());
+  }
 }
 setTheme(localStorage.getItem('dc_theme') || 'dark');
 document.getElementById('themeToggle').addEventListener('click', () => {
@@ -1397,6 +2268,8 @@ setInterval(tickClock, 1000); tickClock();
    ============================================================ */
 const viewTitles = {
   summary: ["TOP LEVEL MANAGEMENT", "SCADA mission control · neon fleet KPIs · risk · capacity · alarms"],
+  sustain: ["Sustainability", "PUE · WUE · CUE hero gauges · carbon · power · water · thermal · modeled"],
+  oee: ["OEE · Equipment Effectiveness", "Infra Availability · Compute Utilization · Job Success · MTBF/MTTR · modeled"],
   overview: ["Overview", "All servers · updated every 45 seconds from SQL Server"],
   server: ["Server", "Real-time metrics for this server · charts refresh every 45s"],
   ai: ["AI Analytics", "Explainable, rule-based AIOps recommendations"],
@@ -1404,6 +2277,7 @@ const viewTitles = {
   wbmon: ["Workbench Monitor", "ServerMonitoringHistory column charts · refresh every 45s"],
   report: ["Report Builder", "Filter, preview and export PDF or CSV reports"],
   alarms: ["Alarm Summary", "Most recent alarm and recovery events"],
+  vision: ["Face and gestures", "Camera authorization and hand gestures from the VisionHMI prototype"],
 };
 
 function showView(view, serverNum){
@@ -1412,15 +2286,27 @@ function showView(view, serverNum){
 
   $$('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + view).classList.add('active');
-  document.body.classList.toggle('tlm-scada', view === 'summary');
+  document.body.classList.toggle('tlm-scada', view === 'summary' || view === 'sustain' || view === 'oee');
 
   $$('.navitem').forEach(n => n.classList.remove('active'));
+  const serversToggle = document.getElementById('navServersToggle');
+  const serversMenu = document.getElementById('navServersMenu');
   if (view === 'server'){
     const btn = document.querySelector(`.navitem[data-view="server"][data-server="${currentServer}"]`);
     if (btn) btn.classList.add('active');
+    if (serversToggle){
+      serversToggle.classList.add('active');
+      serversToggle.setAttribute('aria-expanded', 'true');
+    }
+    if (serversMenu) serversMenu.hidden = false;
   } else {
     const btn = document.querySelector(`.navitem[data-view="${view}"]`);
     if (btn) btn.classList.add('active');
+    if (serversToggle){
+      serversToggle.classList.remove('active');
+      serversToggle.setAttribute('aria-expanded', 'false');
+    }
+    if (serversMenu) serversMenu.hidden = true;
   }
 
   const [title, sub] = viewTitles[view];
@@ -1431,6 +2317,9 @@ function showView(view, serverNum){
 
   clearInterval(histTimer);
   clearInterval(wbHistTimer);
+  clearInterval(sustTimer);
+  clearInterval(oeeTimer);
+  clearInterval(visionTimer);
   stopScopeAnimation();
   if (view === 'server'){
     buildScopeShells('srv-scopes', 'scope');
@@ -1449,7 +2338,13 @@ function showView(view, serverNum){
   if (view === 'ai') pullAnalytics(true);
   if (view === 'compare') pullCompare(true);
   if (view === 'summary') pullSummary();
+  if (view === 'sustain') pullSustainability(true);
+  if (view === 'oee') pullOee(true);
   if (view === 'alarms') pullEvents();
+  if (view === 'vision'){
+    pullVision();
+    visionTimer = setInterval(pullVision, 1000);
+  }
   if (view === 'report') loadReportSqlTable();
 }
 
@@ -1460,8 +2355,30 @@ function pollServerDetail(){
 }
 
 $$('.navitem').forEach(btn => {
-  btn.addEventListener('click', () => showView(btn.dataset.view, btn.dataset.server ? parseInt(btn.dataset.server) : null));
+  btn.addEventListener('click', (ev) => {
+    if (btn.classList.contains('nav-servers-toggle')) return;
+    if (!btn.dataset.view) return;
+    showView(btn.dataset.view, btn.dataset.server ? parseInt(btn.dataset.server) : null);
+  });
 });
+
+(function wireServersDropdown(){
+  const toggle = document.getElementById('navServersToggle');
+  const menu = document.getElementById('navServersMenu');
+  if (!toggle || !menu) return;
+  toggle.addEventListener('click', () => {
+    const open = menu.hidden;
+    menu.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && currentView !== 'server'){
+      // Expanding without leaving current view — keep toggle visual only
+      toggle.classList.add('active');
+    }
+    if (!open && currentView !== 'server'){
+      toggle.classList.remove('active');
+    }
+  });
+})();
 document.getElementById('qa-health').addEventListener('click', () => showView('ai'));
 document.getElementById('qa-alarms').addEventListener('click', () => showView('alarms'));
 document.getElementById('qa-report').addEventListener('click', () => showView('report'));
@@ -1483,7 +2400,7 @@ document.getElementById('pauseBtn').addEventListener('click', () => {
       wbHistTimer = setInterval(() => pullWorkbenchMonitor(false), HISTORY_MS);
     }
   } else {
-    clearInterval(stateTimer); clearInterval(histTimer); clearInterval(wbHistTimer);
+    clearInterval(stateTimer); clearInterval(histTimer); clearInterval(wbHistTimer); clearInterval(sustTimer); clearInterval(oeeTimer);
     stopScopeAnimation();
   }
 });
@@ -1497,6 +2414,8 @@ async function doRefresh(){
   if (currentView === 'ai') pullAnalytics();
   if (currentView === 'compare') pullCompare(true);
   if (currentView === 'summary') pullSummary();
+  if (currentView === 'sustain') pullSustainability(true);
+  if (currentView === 'oee') pullOee(true);
   if (currentView === 'alarms') pullEvents();
   if (currentView === 'report') loadReportSqlTable();
 }
@@ -2616,7 +3535,11 @@ function tlmCssColor(name, fallback){
   return v || fallback;
 }
 
-function tlmIsScada(){ return document.body.classList.contains('tlm-scada'); }
+function tlmIsScada(){
+  // Neon SCADA canvas ink only in dark theme; light mode uses readable ink paths.
+  return document.body.classList.contains('tlm-scada')
+    && document.documentElement.getAttribute('data-theme') !== 'light';
+}
 
 function tlmFitCanvas(canvas){
   const wrap = canvas.parentElement;
@@ -2819,6 +3742,8 @@ function drawMonthlyBars(canvasId, months){
 }
 
 let lastExecutive = null;
+let lastSustData = null;
+let lastOeeData = null;
 let tlmAlarmRange = '24h';
 
 function renderRiskHeatmap(rows){
@@ -3002,6 +3927,587 @@ function bindRiskClickToAlarms(){
   });
 }
 bindRiskClickToAlarms();
+
+/* ============================================================
+   SUSTAINABILITY COMMAND CENTER
+   ============================================================ */
+async function pullSustainability(force){
+  try{
+    const data = await api('/api/sustainability');
+    renderSustainability(data);
+  }catch(e){
+    const alert = document.getElementById('sust-alert');
+    if (alert){
+      alert.className = 'sust-alert';
+      alert.textContent = `Could not load sustainability: ${e.message}`;
+    }
+  }
+  clearInterval(sustTimer);
+  if (currentView === 'sustain' && live){
+    sustTimer = setInterval(() => pullSustainability(false), POLL_MS);
+  }
+}
+
+function sustFmt(v, digits){
+  if (v == null || Number.isNaN(Number(v))) return '–';
+  return Number(v).toFixed(digits);
+}
+
+function sustThemeInk(){
+  const root = document.getElementById('view-sustain') || document.documentElement;
+  const cs = getComputedStyle(root);
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  return {
+    text: (cs.getPropertyValue('--text') || '').trim() || (isLight ? '#151f29' : '#e8f4ff'),
+    dim: (cs.getPropertyValue('--text-dim') || '').trim() || (isLight ? '#5c6b7a' : '#8eb0c8'),
+    faint: (cs.getPropertyValue('--text-faint') || '').trim() || (isLight ? '#8a97a3' : '#6f91aa'),
+    panel: (cs.getPropertyValue('--panel') || '').trim() || (isLight ? '#ffffff' : 'rgba(6,14,24,.95)'),
+    track: isLight ? 'rgba(20,40,60,.12)' : 'rgba(255,255,255,.12)',
+    guide: isLight ? 'rgba(20,40,60,.08)' : 'rgba(255,255,255,.06)',
+    isLight,
+  };
+}
+
+function sustFitCanvas(canvas, minH){
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  // Prefer live frame size so charts fill their card
+  const cssW = Math.max(120, wrap?.clientWidth || canvas.clientWidth || 160);
+  const measuredH = wrap?.clientHeight || 0;
+  const cssH = Math.max(minH || 100, measuredH > 20 ? measuredH : (minH || 120));
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, cssW, cssH };
+}
+
+function sustRoundRect(ctx, x, y, w, h, r){
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+/** Horseshoe arc gauges matching the Command Center photo (open at bottom). */
+function drawSustGauge(canvasId, value, min, max, band, unit){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 130);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const cx = cssW / 2;
+  const cy = cssH * 0.56;
+  const r = Math.min(cssW * 0.42, cssH * 0.42);
+  // Open horseshoe: ~225° sweep, gap at bottom
+  const start = Math.PI * 0.75;   // 135°
+  const end = Math.PI * 2.25;    // 405° = 45°
+  const span = end - start;
+  const v = value == null ? min : Number(value);
+  const t = Math.max(0.02, Math.min(1, (v - min) / (max - min || 1)));
+  const color = band === 'good' ? '#54e6a8' : band === 'watch' ? '#ffd166' : band === 'poor' ? '#ff5a5a' : '#3de0ff';
+  const ink = sustThemeInk();
+  const track = ink.track;
+  const lw = Math.max(12, Math.round(r * 0.18));
+
+  // Outer soft glow ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, start, end);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = ink.isLight ? 0.1 : 0.18;
+  ctx.lineWidth = lw + 14;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Track
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, start, end);
+  ctx.strokeStyle = track;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Value arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, start, start + span * t);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = ink.isLight ? 8 : 22;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Inner tick accents
+  for (let i = 0; i <= 4; i++){
+    const a = start + (span * i) / 4;
+    const x1 = cx + Math.cos(a) * (r - lw * 0.85);
+    const y1 = cy + Math.sin(a) * (r - lw * 0.85);
+    const x2 = cx + Math.cos(a) * (r - lw * 0.35);
+    const y2 = cy + Math.sin(a) * (r - lw * 0.35);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = ink.guide;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  const text = value == null ? '–' : Number(value).toFixed(2);
+  ctx.fillStyle = ink.text;
+  ctx.font = `300 ${Math.round(r * 0.55)}px 'Exo 2', Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = ink.isLight ? 0 : 16;
+  ctx.fillText(text, cx, cy - (unit ? 4 : 0));
+  ctx.shadowBlur = 0;
+
+  if (unit){
+    ctx.fillStyle = ink.faint;
+    ctx.font = `500 ${Math.max(10, Math.round(r * 0.14))}px Inter, sans-serif`;
+    ctx.fillText(unit, cx, cy + r * 0.32);
+  }
+}
+
+/** Neon rounded Scope 1/2/3 bars like the photo. */
+function drawSustBars(canvasId, scopes){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ink = sustThemeInk();
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 120);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const data = scopes || [];
+  if (!data.length){
+    ctx.fillStyle = ink.faint; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No carbon data', cssW / 2, cssH / 2);
+    return;
+  }
+
+  const padT = 28, padB = 28, padL = 16, padR = 16;
+  const plotH = cssH - padT - padB;
+  const max = Math.max(...data.map(d => Number(d.value) || 0), 0.001);
+  const gap = 28;
+  const barW = Math.min(72, (cssW - padL - padR - gap * (data.length - 1)) / data.length);
+  const totalW = data.length * barW + (data.length - 1) * gap;
+  const originX = (cssW - totalW) / 2;
+  const colors = ['#54e6a8', '#3de0ff', '#ff8a3d'];
+  const shortLabels = ['Scope 1', 'Scope 2', 'Scope 3'];
+
+  ctx.strokeStyle = ink.guide;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, cssH - padB);
+  ctx.lineTo(cssW - padR, cssH - padB);
+  ctx.stroke();
+
+  data.forEach((d, i) => {
+    const val = Number(d.value) || 0;
+    const h = Math.max(8, (val / max) * plotH);
+    const x = originX + i * (barW + gap);
+    const y = cssH - padB - h;
+    const c = colors[i % colors.length];
+
+    ctx.save();
+    ctx.shadowColor = c;
+    ctx.shadowBlur = ink.isLight ? 6 : 24;
+    sustRoundRect(ctx, x, y, barW, h, 10);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = ink.text;
+    ctx.font = '700 13px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(sustFmt(val, 2), x + barW / 2, y - 10);
+
+    ctx.fillStyle = ink.dim;
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.fillText(shortLabels[i] || (d.label || '').split(' ')[0], x + barW / 2, cssH - 10);
+  });
+}
+
+/** Smooth neon CFE area + white grid-intensity line. */
+function drawSustAreaLine(canvasId, series){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 120);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const pts = series || [];
+  if (pts.length < 2){
+    ctx.fillStyle = '#6f91aa'; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No CFE series', cssW / 2, cssH / 2);
+    return;
+  }
+  const padL = 10, padR = 10, padT = 18, padB = 14;
+  const w = cssW - padL - padR;
+  const h = cssH - padT - padB;
+  const cfe = pts.map(p => Number(p.cfe_pct) || 0);
+  const grid = pts.map(p => Number(p.grid_intensity) || 0);
+  const cfeMin = Math.min(...cfe) - 3, cfeMax = Math.max(...cfe) + 3;
+  const gMin = Math.min(...grid) - 0.08, gMax = Math.max(...grid) + 0.08;
+
+  const xAt = i => padL + (i / (pts.length - 1)) * w;
+  const yCfe = v => padT + h - ((v - cfeMin) / (cfeMax - cfeMin || 1)) * h;
+  const yGrid = v => padT + h - ((v - gMin) / (gMax - gMin || 1)) * h;
+
+  // horizontal guide
+  ctx.strokeStyle = sustThemeInk().guide;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++){
+    const y = padT + (h * i) / 2;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke();
+  }
+
+  // CFE fill
+  ctx.beginPath();
+  pts.forEach((_, i) => {
+    const x = xAt(i), y = yCfe(cfe[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(xAt(pts.length - 1), padT + h);
+  ctx.lineTo(padL, padT + h);
+  ctx.closePath();
+  const fill = ctx.createLinearGradient(0, padT, 0, padT + h);
+  fill.addColorStop(0, 'rgba(84,230,168,.45)');
+  fill.addColorStop(1, 'rgba(84,230,168,.02)');
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  ctx.beginPath();
+  pts.forEach((_, i) => {
+    const x = xAt(i), y = yCfe(cfe[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#54e6a8';
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = '#54e6a8';
+  ctx.shadowBlur = 12;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.beginPath();
+  pts.forEach((_, i) => {
+    const x = xAt(i), y = yGrid(grid[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = sustThemeInk().text;
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([4, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#54e6a8';
+  ctx.font = '600 9px Inter';
+  ctx.textAlign = 'left';
+  ctx.fillText('CFE %', padL, 12);
+  ctx.fillStyle = sustThemeInk().dim;
+  ctx.textAlign = 'right';
+  ctx.fillText('Grid intensity', cssW - padR, 12);
+}
+
+function drawSustStackedArea(canvasId, days){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ink = sustThemeInk();
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 120);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const rows = days || [];
+  if (!rows.length){
+    ctx.fillStyle = ink.faint; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No power trend', cssW / 2, cssH / 2);
+    return;
+  }
+  const padL = 36, padR = 10, padT = 18, padB = 28;
+  const w = cssW - padL - padR;
+  const h = cssH - padT - padB;
+  const max = Math.max(...rows.map(r => Number(r.total_kw) || 0), 0.01);
+  const n = rows.length;
+  const bw = w / n;
+
+  // guides
+  ctx.strokeStyle = ink.guide;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++){
+    const y = padT + (h * i) / 2;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke();
+  }
+
+  rows.forEach((r, i) => {
+    const it = Number(r.it_kw) || 0;
+    const cool = Number(r.cooling_kw) || 0;
+    const x = padL + i * bw + bw * 0.18;
+    const barW = bw * 0.64;
+    const itH = (it / max) * h;
+    const coolH = (cool / max) * h;
+    const yCool = padT + h - coolH;
+    const yIt = yCool - itH;
+
+    ctx.save();
+    ctx.shadowColor = '#3de0ff';
+    ctx.shadowBlur = 10;
+    sustRoundRect(ctx, x, yIt, barW, itH + coolH, 6);
+    ctx.clip();
+    ctx.fillStyle = '#3de0ff';
+    ctx.fillRect(x, yIt, barW, itH);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#54e6a8';
+    ctx.fillRect(x, yCool, barW, coolH);
+    ctx.restore();
+
+    ctx.fillStyle = ink.dim;
+    ctx.font = '600 10px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.label || '', x + barW / 2, cssH - 10);
+  });
+
+  ctx.fillStyle = ink.dim;
+  ctx.font = '400 9px Inter';
+  ctx.textAlign = 'right';
+  ctx.fillText(max.toFixed(2), padL - 4, padT + 8);
+  ctx.fillText('0', padL - 4, padT + h);
+
+  ctx.fillStyle = '#3de0ff'; ctx.fillRect(padL, 4, 8, 8);
+  ctx.fillStyle = ink.dim; ctx.font = '600 9px Inter'; ctx.textAlign = 'left';
+  ctx.fillText('IT', padL + 12, 11);
+  ctx.fillStyle = '#54e6a8'; ctx.fillRect(padL + 40, 4, 8, 8);
+  ctx.fillStyle = ink.dim;
+  ctx.fillText('Cooling', padL + 52, 11);
+}
+
+/**
+ * Sustainability donut: ring only, no % text on the ring (avoids overlap).
+ * Percents live in the legend; center shows a single clear KPI.
+ */
+function drawSustDonut(canvasId, slices, legendId, opts){
+  const canvas = document.getElementById(canvasId);
+  const legend = document.getElementById(legendId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 110);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const data = (slices || []).filter(s => Number(s.value) > 0);
+  const total = data.reduce((a, s) => a + Number(s.value || 0), 0);
+  if (!total){
+    ctx.fillStyle = '#6f91aa'; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No data', cssW / 2, cssH / 2);
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+
+  const cx = cssW / 2;
+  const cy = cssH / 2;
+  // Keep ring inside canvas; no external labels that clip/overlap
+  const outer = Math.min(cssW, cssH) * 0.42;
+  const inner = outer * 0.62;
+  let angle = -Math.PI / 2;
+
+  data.forEach((s, i) => {
+    const slice = (Number(s.value) / total) * Math.PI * 2;
+    const color = s.color || TLM_COLORS[i % TLM_COLORS.length];
+    ctx.beginPath();
+    ctx.arc(cx, cy, outer, angle, angle + slice);
+    ctx.arc(cx, cy, inner, angle + slice, angle, true);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    angle += slice;
+  });
+
+  // Solid center plate — no competing slice labels
+  ctx.beginPath();
+  ctx.arc(cx, cy, inner - 1, 0, Math.PI * 2);
+  const ink = sustThemeInk();
+  ctx.fillStyle = ink.isLight ? '#ffffff' : 'rgba(6,14,24,.95)';
+  ctx.fill();
+
+  const centerVal = opts?.centerValue != null ? String(opts.centerValue) : '';
+  const centerLab = opts?.centerLabel || '';
+  if (centerVal){
+    ctx.fillStyle = ink.text;
+    ctx.font = `300 ${Math.max(18, Math.round(inner * 0.72))}px 'Exo 2', Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(centerVal, cx, cy - (centerLab ? 7 : 0));
+  }
+  if (centerLab){
+    ctx.fillStyle = ink.faint;
+    ctx.font = '600 10px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(centerLab, cx, cy + (centerVal ? 14 : 0));
+  }
+
+  if (legend){
+    legend.innerHTML = data.map((s, i) => {
+      const c = s.color || TLM_COLORS[i % TLM_COLORS.length];
+      const pct = ((Number(s.value) / total) * 100).toFixed(0);
+      return `<span><i style="background:${c}"></i>${s.label} <b>${pct}%</b></span>`;
+    }).join('');
+  }
+}
+
+function renderSustainability(data){
+  lastSustData = data;
+  const g = data.gauges || {};
+  const f = data.fleet || {};
+  const sys = data.system_status || {};
+
+  const title = document.getElementById('sust-cc-title');
+  const subtitle = document.getElementById('sust-cc-subtitle');
+  if (title) title.textContent = 'Sustainability';
+  if (subtitle && data.subtitle) subtitle.textContent = data.subtitle;
+
+  const sysLine = document.getElementById('sust-sys-line');
+  const sysLabel = document.getElementById('sust-sys-label');
+  const sysTs = document.getElementById('sust-sys-ts');
+  if (sysLabel) sysLabel.textContent = sys.label || '–';
+  if (sysLine){
+    sysLine.className = 'ok-line' + (sys.ok ? '' : ' warn');
+    if (f.pue_band === 'poor') sysLine.className = 'ok-line bad';
+  }
+  if (sysTs){
+    const ts = data.generated_at ? new Date(data.generated_at) : new Date();
+    sysTs.textContent = (sys.online || '–') + ' online · ' + ts.toLocaleTimeString();
+  }
+
+  // Hero gauges PUE / WUE / CUE — paint after layout
+  const paintGauges = () => {
+    [['pue', g.pue], ['wue', g.wue], ['cue', g.cue]].forEach(([key, gauge]) => {
+      if (!gauge) return;
+      const unitSuffix = key === 'wue' ? ' L/kWh' : key === 'cue' ? ' kgCO₂e/kWh' : '';
+      drawSustGauge(
+        `sust-gauge-${key}`,
+        gauge.value,
+        gauge.min ?? 0,
+        gauge.max ?? 2,
+        gauge.band,
+        key === 'pue' ? '' : (key === 'wue' ? 'L/kWh' : 'kgCO₂e/kWh')
+      );
+      const tgt = document.getElementById(`sust-gauge-${key}-target`);
+      const warn = document.getElementById(`sust-gauge-${key}-warn`);
+      const st = document.getElementById(`sust-gauge-${key}-status`);
+      const hint = document.getElementById(`sust-gauge-${key}-hint`);
+      if (tgt) tgt.textContent = `Target: ${sustFmt(gauge.target, 2)}${unitSuffix}`;
+      if (warn){
+        warn.textContent = `Warn: ≥ ${sustFmt(gauge.warn_limit, 2)}${unitSuffix}` +
+          (gauge.poor_limit != null ? ` · Poor ≥ ${sustFmt(gauge.poor_limit, 2)}` : '');
+        warn.className = 'g-warn' + (gauge.band === 'poor' ? ' poor' : gauge.band === 'watch' ? ' active' : '');
+      }
+      if (st){
+        st.className = 'g-status ' + (gauge.band || 'unknown');
+        st.textContent = gauge.status_label || '–';
+      }
+      if (hint){
+        const text = gauge.worry_hint || gauge.delta_text || '';
+        hint.textContent = text;
+        hint.title = text;
+      }
+    });
+  };
+  paintGauges();
+
+  const powerSub = document.getElementById('sust-power-sub');
+  if (powerSub){
+    powerSub.textContent =
+      `Last 7 days · Total ${sustFmt(f.facility_kw, 2)} kW · IT ${sustFmt(f.it_kw, 2)} · Cooling ${sustFmt(f.cooling_kw, 2)} (modeled)`;
+  }
+
+  const ref = data.ref || {};
+  const refDetail = document.getElementById('sust-ref-detail');
+  if (refDetail) refDetail.textContent = `Renewables: ${ref.sources || 'PPA, Solar, Wind'} · ${sustFmt(ref.grid_mix_pct, 0)}% grid mix`;
+
+  const erf = data.erf || {};
+  const erfPct = document.getElementById('sust-erf-pct');
+  const erfDetail = document.getElementById('sust-erf-detail');
+  const erfKw = document.getElementById('sust-erf-kw');
+  if (erfPct) erfPct.textContent = `${sustFmt(erf.pct, 0)}%`;
+  if (erfDetail) erfDetail.textContent = erf.detail || erf.label || '';
+  if (erfKw) erfKw.textContent = sustFmt(erf.reused_kw, 3);
+
+  const water = data.water_sources || {};
+  const waterColors = ['#54e6a8', '#3de0ff', '#1a7a5a'];
+  const waterSlices = (water.slices || []).map((s, i) => ({
+    label: s.label,
+    value: s.pct,
+    color: waterColors[i % waterColors.length],
+  }));
+  const waterSub = document.getElementById('sust-water-sub');
+  if (waterSub) waterSub.textContent = `Modeled mix · ${sustFmt(water.total_lph, 1)} L/h total`;
+
+  const ew = document.getElementById('sust-ewaste');
+  if (ew){
+    ew.innerHTML = (data.ewaste || []).map(item => `
+      <li>
+        <span style="display:inline-flex;align-items:center;gap:10px;">
+          <span class="mark ${item.ok ? 'ok' : 'bad'}">${item.ok ? '✓' : '✕'}</span>
+          ${item.label}${item.note ? ` · ${item.note}` : ''}
+        </span>
+        <span class="val">${item.value != null ? item.value + '%' : '—'}</span>
+      </li>
+    `).join('');
+  }
+
+  const thermal = document.getElementById('sust-thermal');
+  if (thermal){
+    thermal.innerHTML = (data.thermal_map || []).map(c => `
+      <div class="cell ${c.level || 'off'}">
+        <div class="lbl">${c.label}</div>
+        <div class="tmp">${c.status ? sustFmt(c.temperature, 1) + '°C' : 'OFF'}</div>
+      </div>
+    `).join('');
+  }
+
+  const alert = document.getElementById('sust-alert');
+  const alerts = data.alerts || [];
+  if (alert && alerts.length){
+    const a = alerts[0];
+    alert.className = 'sust-alert ' + (a.severity === 'crit' ? '' : a.severity === 'warn' ? 'warn' : 'info');
+    alert.textContent = (a.severity === 'crit' || a.severity === 'warn' ? '⚠ ' : '✓ ') + (a.message || '');
+  }
+
+  const pills = document.getElementById('sust-pills');
+  if (pills){
+    pills.innerHTML = (data.kpi_pills || []).map(p => {
+      const digits = 2;
+      return `<span class="sust-pill"><span class="dot ${p.band || 'unknown'}"></span>${p.label} <b>${sustFmt(p.value, digits)}</b></span>`;
+    }).join('');
+  }
+
+  const note = document.getElementById('sust-note');
+  if (note && data.note) note.textContent = data.note;
+
+  const paintCharts = () => {
+    paintGauges();
+    drawSustBars('sust-carbon-bars', (data.carbon || {}).scopes || []);
+    drawSustAreaLine('sust-cfe-chart', (data.carbon || {}).cfe_72h || []);
+    drawSustStackedArea('sust-power-trend', data.power_trend_7d || []);
+    drawSustDonut(
+      'sust-ref-pie',
+      [
+        { label: 'Renewables', value: ref.pct ?? 85, color: '#54e6a8' },
+        { label: 'Grid mix', value: ref.grid_mix_pct ?? 15, color: '#3de0ff' },
+      ],
+      'sust-ref-legend',
+      { centerValue: Math.round(ref.pct ?? 85) + '%', centerLabel: 'REF' }
+    );
+    drawSustDonut(
+      'sust-water-pie',
+      waterSlices,
+      'sust-water-legend',
+      { centerValue: '', centerLabel: 'water mix' }
+    );
+  };
+  requestAnimationFrame(() => requestAnimationFrame(paintCharts));
+}
 
 async function pullSummary(){
   try{
@@ -3392,7 +4898,7 @@ function renderReportPreview(data){
     ${data.recommendations.length ? `<h3 style="font-size:13px; margin-bottom:10px;">AI Recommendations in Scope</h3>${recs}` : ''}
     ${wbHtml}
     ${sqlHtml}
-    <div class="note">${data.logo_available ? 'Schneider Electric / AVEVA logo found — it will appear on the PDF header.' : 'No logo file found in /assets — the PDF will fall back to a text header.'}</div>
+    <div class="note">${data.logo_available ? 'AAST logo found — it will appear on the PDF header.' : 'No logo file found in /assets — the PDF will fall back to a text header.'}</div>
   `;
 }
 
@@ -3567,6 +5073,74 @@ async function loadReportSqlTable(){
 document.getElementById('rp-sql-refresh')?.addEventListener('click', loadReportSqlTable);
 document.getElementById('rp-sql-server')?.addEventListener('change', loadReportSqlTable);
 
+const VISION_ORIGIN = "http://127.0.0.1:8002";
+
+async function pullVision(){
+  const frame = document.getElementById("visionFrame");
+  const offline = document.getElementById("visionOffline");
+  const lockEl = document.getElementById("visionLock");
+  const userEl = document.getElementById("visionUser");
+  const gestureEl = document.getElementById("visionGesture");
+  const sectionEl = document.getElementById("visionSection");
+  try{
+    const data = await fetch(VISION_ORIGIN + "/status", { cache: "no-store" }).then(r => {
+      if (!r.ok) throw new Error("status " + r.status);
+      return r.json();
+    });
+    offline.hidden = true;
+    if (data.has_frame){
+      frame.hidden = false;
+      frame.src = VISION_ORIGIN + "/frame.jpg?t=" + Date.now();
+    } else {
+      frame.hidden = true;
+    }
+    lockEl.textContent = data.locked ? "Locked" : "Recognized";
+    const user = data.user;
+    userEl.textContent = user ? `${user.name} · ${user.role || "operator"}` : (data.reason || "No face");
+    const gesture = data.gesture || "no hand";
+    gestureEl.textContent = data.event && data.event !== gesture ? `${gesture} → ${String(data.event).replaceAll("_", " ")}` : gesture;
+    const bits = [data.section, data.armed ? "interaction active" : "palm required to arm"];
+    if (data.alarm_count != null) bits.push(`${data.alarm_count} simulated alarms`);
+    sectionEl.textContent = bits.filter(Boolean).join(" · ");
+  }catch(e){
+    frame.hidden = true;
+    offline.hidden = false;
+    offline.textContent = "Vision app is not running. Start it with .venv\\Scripts\\python app.py inside SCADAPROJECT.";
+    lockEl.textContent = "Offline";
+    userEl.textContent = "—";
+    gestureEl.textContent = "—";
+    sectionEl.textContent = "—";
+  }
+}
+
+(function initChatSidebar(){
+  const drawer = document.getElementById("chatSidebar");
+  const frame = document.getElementById("chatSidebarFrame");
+  document.getElementById("chatSidebarBtn")?.addEventListener("click", () => {
+    if (frame.getAttribute("src") === "about:blank") frame.src = "http://127.0.0.1:8001/";
+    drawer.hidden = false;
+  });
+  function tellChatLayout() {
+    frame.contentWindow?.postMessage(
+      { type: "chat-layout", maximized: drawer.classList.contains("maximized") },
+      "http://127.0.0.1:8001"
+    );
+  }
+  frame.addEventListener("load", tellChatLayout);
+  const maxBtn = document.getElementById("chatSidebarMax");
+  maxBtn?.addEventListener("click", () => {
+    const maximized = drawer.classList.toggle("maximized");
+    maxBtn.textContent = maximized ? "Restore" : "Maximize";
+    tellChatLayout();
+  });
+  document.getElementById("chatSidebarClose")?.addEventListener("click", () => {
+    drawer.hidden = true;
+    drawer.classList.remove("maximized");
+    if (maxBtn) maxBtn.textContent = "Maximize";
+    tellChatLayout();
+  });
+})();
+
 /* ============================================================
    STATIC AI Q&A WIDGET
    ============================================================ */
@@ -3660,9 +5234,387 @@ function answerAiQuestion(id){
 })();
 
 /* ============================================================
+   OEE EQUIPMENT EFFECTIVENESS
+   ============================================================ */
+let oeeWindow = '12h';
+
+async function pullOee(force){
+  try{
+    const data = await api('/api/oee?window=' + encodeURIComponent(oeeWindow));
+    renderOee(data);
+  }catch(e){
+    const alert = document.getElementById('oee-alert');
+    if (alert){
+      alert.className = 'oee-live-chip bad';
+      alert.textContent = `Could not load OEE: ${e.message}`;
+    }
+  }
+  clearInterval(oeeTimer);
+  if (currentView === 'oee' && live){
+    oeeTimer = setInterval(() => pullOee(false), POLL_MS);
+  }
+}
+
+function oeeThemeInk(){
+  const rootEl = document.getElementById('view-oee') || document.documentElement;
+  const cs = getComputedStyle(rootEl);
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  return {
+    text: (cs.getPropertyValue('--text') || '').trim() || (isLight ? '#151f29' : '#e8f4ff'),
+    dim: (cs.getPropertyValue('--text-dim') || '').trim() || (isLight ? '#5c6b7a' : '#8eb0c8'),
+    faint: (cs.getPropertyValue('--text-faint') || '').trim() || (isLight ? '#8a97a3' : '#6f91aa'),
+    track: isLight ? 'rgba(20,40,60,.12)' : 'rgba(255,255,255,.12)',
+    guide: isLight ? 'rgba(20,40,60,.08)' : 'rgba(255,255,255,.06)',
+    isLight,
+  };
+}
+
+/** Full circular doughnut gauge — ring around the value. */
+function drawOeeSemiGauge(canvasId, valuePct, band, targetPct){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 72);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const ink = oeeThemeInk();
+  const color = ink.isLight
+    ? (band === 'good' ? '#0f8f5b' : band === 'watch' ? '#b8860b' : band === 'poor' ? '#c62828' : '#0b6d8f')
+    : (band === 'good' ? '#6ff5c0' : band === 'watch' ? '#ffe08a' : band === 'poor' ? '#ff7a88' : '#5aefff');
+  const track = ink.isLight ? 'rgba(20,40,60,.14)' : 'rgba(90,239,255,.28)';
+  const halo = ink.isLight ? 0.12 : 0.3;
+
+  const cx = cssW / 2;
+  const cy = cssH / 2;
+  const pad = 10;
+  const r = Math.max(22, Math.min(cssW, cssH) / 2 - pad);
+  const lw = Math.max(10, Math.min(18, Math.round(r * 0.18)));
+  const t = Math.max(0, Math.min(1, (Number(valuePct) || 0) / 100));
+  // Full circle: start at top, sweep clockwise for value fill
+  const start = -Math.PI / 2;
+  const valueEnd = start + t * Math.PI * 2;
+
+  // Soft outer halo (full ring)
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = halo;
+  ctx.lineWidth = lw + 8;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Track ring (full circle)
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = track;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'butt';
+  ctx.stroke();
+
+  // Value arc
+  if (t > 0.001){
+    ctx.beginPath();
+    if (t >= 0.999){
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    } else {
+      ctx.arc(cx, cy, r, start, valueEnd, false);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = ink.isLight ? 6 : 16;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  if (targetPct != null){
+    const ta = start + Math.max(0, Math.min(1, Number(targetPct) / 100)) * Math.PI * 2;
+    const tx1 = cx + Math.cos(ta) * (r - lw * 0.85);
+    const ty1 = cy + Math.sin(ta) * (r - lw * 0.85);
+    const tx2 = cx + Math.cos(ta) * (r + lw * 0.45);
+    const ty2 = cy + Math.sin(ta) * (r + lw * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(tx1, ty1); ctx.lineTo(tx2, ty2);
+    ctx.strokeStyle = ink.isLight ? ink.dim : '#c8e8ff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  const text = valuePct == null ? '–' : Number(valuePct).toFixed(1) + '%';
+  ctx.fillStyle = ink.isLight ? ink.text : '#e8f7ff';
+  ctx.font = `300 ${Math.round(r * 0.42)}px 'Exo 2', Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = ink.isLight ? 0 : 8;
+  ctx.fillText(text, cx, cy);
+  ctx.shadowBlur = 0;
+}
+
+function drawOeeTimeline(canvasId, segments){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ink = oeeThemeInk();
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 56);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const segs = segments || [];
+  if (!segs.length){
+    ctx.fillStyle = ink.faint; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No timeline data', cssW / 2, cssH / 2);
+    return;
+  }
+  // Slim strip, vertically centered in the card
+  const padL = 8, padR = 8, padT = 8, padB = 22;
+  const barH = 14;
+  const y = Math.max(padT, Math.round((cssH - padB - barH) / 2));
+  const totalH = segs.reduce((s, g) => s + (Number(g.hours) || 0.01), 0) || 1;
+  let x = padL;
+  const plotW = cssW - padL - padR;
+
+  segs.forEach((g) => {
+    const w = Math.max(2, (Number(g.hours) / totalH) * plotW);
+    ctx.fillStyle = g.color || '#8eb0c8';
+    sustRoundRect(ctx, x, y, w - 1, barH, 3);
+    ctx.fill();
+    x += w;
+  });
+
+  const first = segs[0], last = segs[segs.length - 1];
+  ctx.fillStyle = ink.faint;
+  ctx.font = '10px Inter, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  if (first?.t0) ctx.fillText(String(first.t0).replace('T', ' ').slice(0, 16), padL, y + barH + 6);
+  ctx.textAlign = 'right';
+  if (last?.t1) ctx.fillText(String(last.t1).replace('T', ' ').slice(0, 16), cssW - padR, y + barH + 6);
+}
+
+function drawOeeReasonBars(canvasId, items, unitLabel){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ink = oeeThemeInk();
+  // Prefer full AVEVA catalog (6); allow +1 Running row without dropping zeros
+  const rows = (items || []).slice(0, 7);
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 120);
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (!rows.length){
+    ctx.fillStyle = ink.faint; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No reasons', cssW / 2, cssH / 2);
+    return;
+  }
+  const padL = 8, padR = 52, padT = 6, padB = 4;
+  const rowH = Math.max(28, Math.min(36, (cssH - padT - padB) / Math.max(rows.length, 1)));
+  const max = Math.max(...rows.map(r => Number(r.value) || 0), 0.001);
+  const fontPx = Math.max(12, Math.min(14, Math.round(rowH * 0.42)));
+  ctx.font = '500 ' + fontPx + 'px Inter, sans-serif';
+  // Keep label column wide enough so long names (e.g. Planned Maintenance) never cover the bar
+  const measured = Math.max(...rows.map(r => ctx.measureText(String(r.label || '')).width), 80);
+  const labelW = Math.min(Math.max(112, Math.ceil(measured) + 10), Math.round(cssW * 0.42));
+  const barMax = Math.max(36, cssW - padL - padR - labelW - 10);
+  const labelColor = ink.isLight ? ink.dim : '#b8d4e8';
+
+  rows.forEach((r, i) => {
+    const y = padT + i * rowH;
+    const val = Number(r.value) || 0;
+    const w = val > 0 ? Math.max(8, (val / max) * barMax) : 0;
+    const barPad = Math.max(4, Math.round(rowH * 0.2));
+    const barH = Math.max(10, rowH - barPad * 2);
+    const barColor = r.color || '#5aefff';
+    const midY = y + rowH * 0.5;
+
+    // Label clipped to its column so it cannot overwrite the bar
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padL, y, labelW - 6, rowH);
+    ctx.clip();
+    ctx.fillStyle = labelColor;
+    ctx.font = '500 ' + fontPx + 'px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(r.label || ''), padL, midY);
+    ctx.restore();
+
+    const bx = padL + labelW;
+    if (w > 0){
+      sustRoundRect(ctx, bx, y + barPad, w, barH, 4);
+      ctx.fillStyle = barColor;
+      ctx.shadowColor = barColor;
+      ctx.shadowBlur = ink.isLight ? 0 : 8;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      // Visible zero track (never dark-on-dark)
+      sustRoundRect(ctx, bx, y + barPad, Math.max(14, barMax * 0.08), barH, 4);
+      ctx.fillStyle = ink.isLight ? 'rgba(20,40,60,.12)' : 'rgba(90,239,255,.22)';
+      ctx.fill();
+    }
+
+    ctx.fillStyle = ink.isLight ? ink.text : '#e8f7ff';
+    ctx.font = '600 ' + fontPx + 'px var(--font-mono), monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const suffix = unitLabel ? unitLabel : '';
+    ctx.fillText(String(val) + suffix, cssW - 8, midY);
+  });
+}
+
+function drawOeeProdBars(canvasId, servers){
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ink = oeeThemeInk();
+  const { ctx, cssW, cssH } = sustFitCanvas(canvas, 100);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const data = servers || [];
+  if (!data.length){
+    ctx.fillStyle = ink.faint; ctx.font = '12px Inter'; ctx.textAlign = 'center';
+    ctx.fillText('No production data', cssW / 2, cssH / 2);
+    return;
+  }
+  const padT = 16, padB = 22, padL = 12, padR = 12;
+  const plotH = cssH - padT - padB;
+  const max = Math.max(...data.map(d => Number(d.units) || 0), 0.001);
+  const gap = 14;
+  const barW = Math.min(48, (cssW - padL - padR - gap * (data.length - 1)) / data.length);
+  const totalW = data.length * barW + (data.length - 1) * gap;
+  const originX = (cssW - totalW) / 2;
+
+  data.forEach((d, i) => {
+    const val = Number(d.units) || 0;
+    const h = Math.max(4, (val / max) * plotH);
+    const x = originX + i * (barW + gap);
+    const y = cssH - padB - h;
+    const c = d.status ? '#54e6a8' : '#78909c';
+    sustRoundRect(ctx, x, y, barW, h, 4);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.fillStyle = ink.faint;
+    ctx.font = '10px Inter';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('S' + d.server, x + barW / 2, cssH - padB + 4);
+    ctx.fillStyle = ink.text;
+    ctx.font = '600 10px monospace';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(String(Math.round(val)), x + barW / 2, y - 2);
+  });
+}
+
+function renderOee(data){
+  lastOeeData = data;
+  const g = data.gauges || {};
+  const fleet = data.fleet || {};
+  const insights = data.insights || {};
+
+  const title = document.getElementById('oee-cc-title');
+  const subtitle = document.getElementById('oee-cc-subtitle');
+  if (title && data.title) title.textContent = data.title;
+  if (subtitle && data.subtitle) subtitle.textContent = data.subtitle;
+
+  const alert = document.getElementById('oee-alert');
+  if (alert){
+    const oeePct = fleet.oee_pct != null ? Number(fleet.oee_pct).toFixed(1) : '–';
+    const band = g.oee?.band || 'unknown';
+    const cls = band === 'poor' ? ' bad' : band === 'watch' ? ' warn' : '';
+    alert.className = 'oee-live-chip' + cls;
+    const online = `${fleet.servers_online ?? '–'}/${fleet.total_servers ?? 4} online`;
+    alert.textContent = `Effectiveness ${oeePct}% · ${online}`;
+    alert.title = data.note || (data.database_connected ? 'SQL linked · modeled OEE' : 'Modeled · DB offline');
+  }
+
+  const pills = document.getElementById('oee-insight-pills');
+  if (pills){
+    const pue = insights.pue != null ? Number(insights.pue).toFixed(2) : '–';
+    pills.innerHTML = [
+      `<span class="sust-pill"><span class="dot"></span>Uptime <b>${insights.server_uptime_pct ?? '–'}%</b></span>`,
+      `<span class="sust-pill"><span class="dot"></span>MTBF <b>${insights.mtbf_hours ?? '–'}h</b></span>`,
+      `<span class="sust-pill"><span class="dot"></span>MTTR <b>${insights.mttr_minutes ?? '–'}m</b></span>`,
+      `<span class="sust-pill"><span class="dot watch"></span>Net <b>${insights.network_error_rate_pct ?? '–'}%</b></span>`,
+      `<span class="sust-pill"><span class="dot"></span>PUE <b>${pue}</b></span>`,
+    ].join('');
+  }
+
+  $$('#oee-range button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.window === (data.window || oeeWindow));
+  });
+
+  const paint = () => {
+    [['oee', g.oee], ['availability', g.availability], ['performance', g.performance], ['quality', g.quality]].forEach(([key, gauge]) => {
+      if (!gauge) return;
+      const valuePct = gauge.value_pct != null ? gauge.value_pct : null;
+      drawOeeSemiGauge('oee-gauge-' + key, valuePct, gauge.band, (gauge.target || 0) * 100);
+      const name = document.getElementById('oee-gauge-' + key + '-name');
+      const noteEl = document.getElementById('oee-gauge-' + key + '-note');
+      const tgt = document.getElementById('oee-gauge-' + key + '-target');
+      const warn = document.getElementById('oee-gauge-' + key + '-warn');
+      const st = document.getElementById('oee-gauge-' + key + '-status');
+      if (name && gauge.label) name.textContent = gauge.label;
+      if (noteEl){
+        const note = gauge.asset_note || '';
+        noteEl.textContent = note;
+        noteEl.title = note || (gauge.worry_hint || '');
+      }
+      const tgtPct = Math.round((gauge.target || 0) * 100);
+      const warnPct = Math.round((gauge.warn_limit != null ? gauge.warn_limit : 0.85) * 100);
+      const poorPct = Math.round((gauge.poor_limit != null ? gauge.poor_limit : 0.60) * 100);
+      const worry = gauge.worry_hint || '';
+      if (tgt) tgt.textContent = 'Target: ' + tgtPct + '%';
+      if (warn){
+        warn.textContent = 'Warn: < ' + warnPct + '% · Poor < ' + poorPct + '%';
+        warn.className = 'g-warn' + (gauge.band === 'poor' ? ' poor' : gauge.band === 'watch' ? ' active' : '');
+        warn.title = worry;
+      }
+      if (st){
+        st.textContent = gauge.status_label || gauge.band || '–';
+        st.className = 'g-status ' + (gauge.band || 'unknown');
+        st.title = worry;
+      }
+    });
+
+    drawOeeTimeline('oee-timeline', data.timeline);
+    const legend = document.getElementById('oee-timeline-legend');
+    if (legend){
+      const defaults = [
+        { label: 'Running', color: '#54e6a8' },
+        { label: 'Starved', color: '#3de0ff' },
+        { label: 'Fault', color: '#ff6b6b' },
+        { label: 'Planned', color: '#c4a0ff' },
+        { label: 'Offline', color: '#8eb0c8' },
+      ];
+      const fromData = {};
+      (data.timeline || []).forEach(s => { if (s.label) fromData[s.label] = s.color; });
+      legend.innerHTML = defaults.map(s =>
+        `<span><i style="background:${fromData[s.label] || s.color}"></i>${s.label}</span>`
+      ).join('');
+    }
+
+    const winLabel = data.window_hours ? `${data.window_hours}h window` : '';
+    const sub = document.getElementById('oee-timeline-sub');
+    if (sub) sub.textContent = `Running · Starved · Fault · Planned · Offline${winLabel ? ' · ' + winLabel : ''}`;
+
+    drawOeeReasonBars('oee-reasons-count', data.reasons_count, '');
+    drawOeeReasonBars('oee-reasons-duration', data.reasons_duration, 'm');
+  };
+
+  requestAnimationFrame(() => requestAnimationFrame(paint));
+}
+
+(function wireOeeRange(){
+  const wrap = document.getElementById('oee-range');
+  if (!wrap) return;
+  wrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-window]');
+    if (!btn) return;
+    oeeWindow = btn.dataset.window || '12h';
+    $$('#oee-range button').forEach(b => b.classList.toggle('active', b === btn));
+    if (currentView === 'oee') pullOee(true);
+  });
+})();
+
+/* ============================================================
    KEYBOARD SHORTCUTS
-   1-4 jump to a server, O overview, S summary, I AI analytics,
-   C workbench compare, R report builder, A alarm summary.
+   1-4 jump to a server, O overview, S summary, U sustainability,
+   E OEE, I AI analytics, C workbench compare, R report builder, A alarm summary.
    ============================================================ */
 document.addEventListener('keydown', (e) => {
   const tag = (e.target.tagName || '').toLowerCase();
@@ -3671,6 +5623,8 @@ document.addEventListener('keydown', (e) => {
   if (['1','2','3','4'].includes(key)) showView('server', parseInt(key));
   else if (key === 'o') showView('overview');
   else if (key === 's') showView('summary');
+  else if (key === 'u') showView('sustain');
+  else if (key === 'e') showView('oee');
   else if (key === 'i') showView('ai');
   else if (key === 'c') showView('compare');
   else if (key === 'w') showView('wbmon');
@@ -3693,6 +5647,10 @@ window.addEventListener('resize', () => {
     drawAllScopes(lastWbMonitor.history, 'wb');
   }
   if (currentView === 'summary') pullSummary();
+  if (currentView === 'sustain' && lastSustData) renderSustainability(lastSustData);
+  else if (currentView === 'sustain') pullSustainability(false);
+  if (currentView === 'oee' && lastOeeData) renderOee(lastOeeData);
+  else if (currentView === 'oee') pullOee(false);
 });
 </script>
 </body>
