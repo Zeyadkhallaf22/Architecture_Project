@@ -1,8 +1,12 @@
+# SCADA_PROJECT
+
+Implementing AI layer and IDS for SCADA Systems.
+
 # Schneider Electric · AVEVA — Data Center Monitoring Dashboard
 
 Professional SCADA-style dashboard for monitoring a 4-server data center fleet. Live KPIs come from **SQL Server Express** (IT System Performance dataset playback). The UI is a dark mission-control layout with TOP LEVEL MANAGEMENT, live PLC-style charts, alarms, AI recommendations, workbench compare, and PDF/CSV reports.
 
-**Repo:** [mariamsalem1/Schneider-Electric-project-](https://github.com/mariamsalem1/Schneider-Electric-project-)
+**Repo:** [mariamsalem1/SCADA_PROJECT](https://github.com/mariamsalem1/SCADA_PROJECT)
 
 ## Features
 
