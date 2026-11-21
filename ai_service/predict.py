@@ -19,11 +19,13 @@ from ai_service.database import load_current_state
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_CANDIDATES = (
+    ROOT / "models" / "model.pkl",
     ROOT / "model.pkl",
     ROOT / "ai_service" / "model.pkl",
     Path("model.pkl"),
 )
 SCALER_CANDIDATES = (
+    ROOT / "models" / "scaler.pkl",
     ROOT / "scaler.pkl",
     ROOT / "ai_service" / "scaler.pkl",
     Path("scaler.pkl"),
@@ -64,7 +66,7 @@ def ensure_model_loaded() -> bool:
     if model_path is None or scaler_path is None:
         _load_error = (
             "Trained model not found. Run ai_service/train_model.py to create "
-            "model.pkl and scaler.pkl in the project root."
+            "model.pkl and scaler.pkl in the models folder."
         )
         return False
 

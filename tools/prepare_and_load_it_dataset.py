@@ -17,9 +17,9 @@ from pathlib import Path
 import pandas as pd
 import pyodbc
 
-ROOT = Path(__file__).resolve().parent
-SOURCE_CSV = ROOT / "Big_data_dataset.csv"
-OUTPUT_CSV = ROOT / "IT_System_Performance_renamed.csv"
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE_CSV = ROOT / "datasets" / "Big_data_dataset.csv"
+OUTPUT_CSV = ROOT / "datasets" / "IT_System_Performance_renamed.csv"
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 17 for SQL Server};"

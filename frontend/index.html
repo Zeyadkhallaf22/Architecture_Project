@@ -2427,7 +2427,8 @@ function startPolling(){
   clearInterval(stateTimer);
   pullState();
   pullDbStatus();
-  stateTimer = setInterval(() => { pullState(); pullDbStatus(); }, POLL_MS);
+  pullEvents();
+  stateTimer = setInterval(() => { pullState(); pullDbStatus(); pullEvents(); }, POLL_MS);
 }
 
 async function pullState(){
@@ -5185,7 +5186,7 @@ function answerAiQuestion(id){
     text = `There are ${n} active alarm flag(s) across CPU / Temp / Down.`;
   } else if (id === 'ai1'){
     const s1 = cmp?.servers?.find(s => s.server === 1);
-    if (!cmp?.model_available) text = 'Trained AI model is not loaded. Run ai_service/train_model.py to create model.pkl.';
+    if (!cmp?.model_available) text = 'Trained AI model is not loaded. Run ai_service/train_model.py to create models/model.pkl.';
     else if (s1?.ai) text = `Server 1 AI risk is ${s1.ai.risk}. Predicted CPU ${fmt1(s1.ai.predicted_cpu)}%. ${s1.ai.recommendation}`;
     else text = 'AI prediction for Server 1 is not available yet.';
   } else if (id === 'wb'){

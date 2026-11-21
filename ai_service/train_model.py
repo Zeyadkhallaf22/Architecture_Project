@@ -10,6 +10,7 @@ Predict future CPU usage based on server metrics.
 
 import pandas as pd
 import joblib
+from pathlib import Path
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -217,7 +218,7 @@ print(
 joblib.dump(
 
     model,
-    "model.pkl"
+    Path(__file__).resolve().parents[1] / "models" / "model.pkl"
 
 )
 
@@ -225,7 +226,7 @@ joblib.dump(
 joblib.dump(
 
     scaler,
-    "scaler.pkl"
+    Path(__file__).resolve().parents[1] / "models" / "scaler.pkl"
 
 )
 
@@ -233,5 +234,5 @@ joblib.dump(
 print("\nAI Model saved successfully!")
 
 print("Created:")
-print("model.pkl")
-print("scaler.pkl")
+print("models/model.pkl")
+print("models/scaler.pkl")

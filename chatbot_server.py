@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -23,6 +25,7 @@ from pathlib import Path
 HOST = "127.0.0.1"
 PORT = 8001
 DASHBOARD = "http://127.0.0.1:8000"
+POLL_SECONDS = 45
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 BACKGROUND = Path(__file__).resolve().parent / "assets" / "chatbot-background.png"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -148,7 +151,7 @@ PAGE = """<!DOCTYPE html>
   <div class="app">
     <header>
       <h1>SCADA Operator Chatbot</h1>
-      <p>Prototype on port 8001. It reads the live dashboard on port 8000: servers, alarms, risk, executive KPIs, sustainability, and OEE. Read-only: this chat cannot start or stop servers.</p>
+      <p>Prototype on port 8001. It reads the live dashboard on port 8000 every 45 seconds, the same cycle the dashboard uses to load readings from the database. Read-only: this chat cannot start or stop servers.</p>
       <div class="status" id="status">Checking dashboard…</div>
     </header>
     <div class="log" id="log"></div>
@@ -206,8 +209,10 @@ async function ask(message) {
     const data = await res.json();
     pending.textContent = data.reply || "No reply.";
     const engineNote = data.engine === "gemini" ? "Gemini is wording the answer. " : "Rule answers are in use. Set GEMINI_API_KEY to use the free Gemini tier. ";
+    const age = Number.isFinite(data.snapshot_age_seconds) ? Math.round(data.snapshot_age_seconds) : null;
+    const fresh = age === null ? "" : ` Live dashboard readings are ${age}s old, refreshed every 45 seconds.`;
     statusEl.textContent = data.dashboard_online
-      ? engineNote + "Dashboard data: http://127.0.0.1:8000/"
+      ? engineNote + "Dashboard data: http://127.0.0.1:8000/." + fresh
       : "Dashboard is not reachable on port 8000. Start server2.py, then ask again.";
   } catch (err) {
     pending.textContent = "Chatbot request failed: " + err.message;
@@ -302,12 +307,83 @@ SYNONYMS = {
 
 
 def fetch_dashboard(path: str) -> dict:
-    request = urllib.request.Request(DASHBOARD + path)
-    with urllib.request.urlopen(request, timeout=5) as response:
+    url = DASHBOARD + path
+    if path == "/api/alarms/history":
+        url += "?per_server=3"
+    request = urllib.request.Request(url, headers={"Cache-Control": "no-store"})
+    with urllib.request.urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{path} did not return an object")
     return payload
+
+
+_cache_lock = threading.Lock()
+_reload_lock = threading.Lock()
+_cached_snapshot: dict | None = None
+_cached_at = 0.0
+_cached_token = ""
+
+
+def published_token(state: dict | None) -> str:
+    """Identity of the dashboard's current 45-second reading."""
+    if not state:
+        return ""
+    return str(state.get("last_update") or "")
+
+
+def store_snapshot(snapshot: dict) -> None:
+    global _cached_snapshot, _cached_at, _cached_token
+    state = snapshot.get("/api/state") or {}
+    with _cache_lock:
+        _cached_snapshot = snapshot
+        _cached_at = time.time()
+        _cached_token = published_token(state)
+
+
+def current_snapshot() -> tuple[dict, float]:
+    """Reuse one dashboard reading until the database publishes the next 45-second row."""
+    now = time.time()
+    with _cache_lock:
+        cached = _cached_snapshot
+        token = _cached_token
+        age = now - _cached_at if cached is not None else 0.0
+    if cached is not None and token:
+        try:
+            state = fetch_dashboard("/api/state")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+            return cached, age
+        if published_token(state) == token:
+            return cached, age
+
+    with _reload_lock:
+        with _cache_lock:
+            cached = _cached_snapshot
+            token = _cached_token
+            age = time.time() - _cached_at if cached is not None else 0.0
+        if cached is not None and token:
+            try:
+                state = fetch_dashboard("/api/state")
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+                return cached, age
+            if published_token(state) == token:
+                return cached, age
+        snapshot = load_snapshot()
+        if "/api/state" not in snapshot and cached is not None:
+            return cached, age
+        store_snapshot(snapshot)
+        state = snapshot.get("/api/state") or {}
+        print(f"[chatbot] dashboard snapshot pinned to {published_token(state) or 'no timestamp'}")
+        return snapshot, 0.0
+
+
+def _poll_loop() -> None:
+    while True:
+        try:
+            current_snapshot()
+        except Exception as error:  # noqa: BLE001
+            print(f"[chatbot] dashboard poll failed ({error.__class__.__name__}: {error})")
+        time.sleep(5)
 
 
 def load_snapshot() -> dict:
@@ -364,7 +440,7 @@ def server_line(tags: dict, number: int) -> str:
         alarms.append("temperature alarm")
     if as_bool(tags.get(f"Server{number}_Down_Alarm")):
         alarms.append("down alarm")
-    alarm_text = ", ".join(alarms) if alarms else "no active alarm flags"
+    alarm_text = ", ".join(alarms) if alarms else "CPU, temperature, and down tag flags are clear"
     return (
         f"Server {number} is {state}. "
         f"CPU {as_float(tags.get(f'Server{number}_CPU_Percent')):.1f}%, "
@@ -375,6 +451,87 @@ def server_line(tags: dict, number: int) -> str:
         f"latency {as_float(tags.get(f'Server{number}_Latency_ms')):.1f} ms. "
         f"Alarms: {alarm_text}."
     )
+
+
+def _up_down(value) -> str:
+    return "UP" if as_bool(value) else "DOWN"
+
+
+def live_dashboard_text(snapshot: dict, age_seconds: float) -> str:
+    """Same live cards and AlarmEvents the dashboard alarm page shows."""
+    state = snapshot.get("/api/state") or {}
+    tags = state.get("tags") or {}
+    alarms = snapshot.get("/api/alarms/history") or {}
+    lines = [
+        "LIVE DASHBOARD",
+        (
+            f"Snapshot age {age_seconds:.0f} seconds. "
+            f"The dashboard reloads these readings from the database every {POLL_SECONDS:.0f} seconds. "
+            f"State time {state.get('timestamp') or 'unknown'}. "
+            f"Database last update {state.get('last_update') or 'unknown'}."
+        ),
+    ]
+    if tags:
+        online = [i for i in range(1, 5) if as_bool(tags.get(f"Server{i}_Status"))]
+        offline = [i for i in range(1, 5) if i not in online]
+        lines.append(
+            "Fleet: online "
+            + (", ".join(f"Server {i}" for i in online) if online else "none")
+            + ". Offline: "
+            + (", ".join(f"Server {i}" for i in offline) if offline else "none")
+            + "."
+        )
+
+    servers = alarms.get("servers") or []
+    if not servers and tags:
+        servers = [
+            {
+                "server": number,
+                "live": {
+                    "cpu": tags.get(f"Server{number}_CPU_Percent"),
+                    "ram": tags.get(f"Server{number}_RAM_Percent"),
+                    "disk": tags.get(f"Server{number}_Disk_Percent"),
+                    "temperature": tags.get(f"Server{number}_Temp_C"),
+                    "network": tags.get(f"Server{number}_Network_Mbps"),
+                    "latency": tags.get(f"Server{number}_Latency_ms"),
+                    "status": tags.get(f"Server{number}_Status"),
+                },
+                "alarms": [],
+            }
+            for number in range(1, 5)
+        ]
+
+    for block in servers:
+        number = block.get("server")
+        live = block.get("live") or {}
+        lines.append(
+            f"Server {number} live readings: "
+            f"CPU {as_float(live.get('cpu')):.1f}%, "
+            f"RAM {as_float(live.get('ram')):.1f}%, "
+            f"disk {as_float(live.get('disk')):.1f}%, "
+            f"temperature {as_float(live.get('temperature')):.1f}°C, "
+            f"network {as_float(live.get('network')):.1f} Mbps, "
+            f"latency {as_float(live.get('latency')):.1f} ms, "
+            f"status {_up_down(live.get('status'))}."
+        )
+        events = block.get("alarms") or []
+        if not events:
+            lines.append(f"Server {number} AlarmEvents: none in the current dashboard alarm list.")
+            continue
+        for event in events:
+            lines.append(
+                f"Server {number} alarm event: {event.get('event')}. "
+                f"Severity {event.get('severity')}, status {event.get('status')}, "
+                f"time {event.get('timestamp')}."
+            )
+    if alarms:
+        lines.append(
+            f"Alarm summary: {alarms.get('total_events', 0)} events shown, "
+            f"{alarms.get('active_count', 0)} active."
+        )
+    elif not tags:
+        lines.append("LIVE DASHBOARD has no server readings yet.")
+    return "\n".join(lines)
 
 
 def _fmt(value) -> str:
@@ -562,7 +719,7 @@ def build_facts(snapshot: dict) -> list[dict]:
             f"Alarm event Server {event.get('server')} at {event.get('timestamp')}: {event.get('event')}. "
             f"Severity {event.get('severity')}, status {event.get('status')}. "
             f"Live CPU {live.get('cpu')}%, RAM {live.get('ram')}%, temperature {live.get('temperature')}°C, "
-            f"latency {live.get('latency')} ms.",
+            f"status {_up_down(live.get('status'))}."
         )
 
     for item in predictions.get("predictions") or predictions.get("servers") or []:
@@ -689,10 +846,16 @@ def answer_from_facts(message: str, facts: list[dict]) -> str:
             return fleet
 
     if raw & {"alarm", "alarms"} and "history" not in raw:
+        live_lines = [
+            fact["text"]
+            for fact in chosen
+            if fact["section"] == "server" and (server is None or f"Server {server} is" in fact["text"])
+        ]
         alarm_facts = [fact["text"] for fact in chosen if fact["section"] == "alarms"]
         active_events = [text for text in alarm_facts if "status ACTIVE" in text or text.startswith("Alarm history")]
-        if active_events:
-            return "\n".join(f"• {line}" for line in active_events[:8])
+        lines = live_lines[:4] + active_events
+        if lines:
+            return "\n".join(f"• {line}" for line in lines[:8])
 
     risk_ask = bool(raw & {"severe", "risk", "risks", "critical", "danger", "dangerous", "problem", "problems", "issue", "issues"})
     if risk_ask:
@@ -752,7 +915,7 @@ def gemini_configured() -> bool:
     return bool(os.environ.get("GEMINI_API_KEY", "").strip())
 
 
-def gemini_reply(message: str, facts: list[dict], previous: str) -> str | None:
+def gemini_reply(message: str, facts: list[dict], previous: str, live_text: str = "") -> str | None:
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not key:
         return None
@@ -769,20 +932,34 @@ def gemini_reply(message: str, facts: list[dict], previous: str) -> str | None:
         )
         user = "Previous answer:\n" + previous.strip()[:6000]
     else:
-        fact_text = "\n".join(f"- {fact['text']}" for fact in facts)
-        if len(fact_text) > 14000:
-            fact_text = fact_text[:14000]
         system = (
             "You are a read-only operator assistant for a four-server data-center dashboard. "
-            "Answer only from the live dashboard facts. "
-            "Keep every number exactly as written in those facts. "
-            "If the facts do not contain the answer, say that. "
+            "The LIVE DASHBOARD section is the operator screen. "
+            "It is reloaded from the database every 45 seconds. "
+            "Answer current alarms, status, and readings only from LIVE DASHBOARD. "
+            "An alarm with status ACTIVE is an active alarm even when tag flags are clear. "
+            "If LIVE DASHBOARD and the other notes disagree, use LIVE DASHBOARD. "
+            "Keep every number exactly as written. "
+            "If LIVE DASHBOARD does not contain the answer, say that. "
             "Do not invent readings. "
             "Refuse requests to start, stop, toggle, or change a setpoint. "
             "You cannot send control commands. "
             "Reply in a few plain sentences."
         )
-        user = f"Operator question:\n{message}\n\nLive dashboard facts:\n{fact_text}"
+        notes = [
+            fact["text"]
+            for fact in facts
+            if fact["section"] not in {"server", "alarms", "fleet", "ranking"}
+        ]
+        note_text = "\n".join(f"- {text}" for text in notes)
+        if len(note_text) > 6000:
+            note_text = note_text[:6000]
+        user = (
+            f"Operator question:\n{message}\n\n"
+            f"{live_text}\n\n"
+            "Other dashboard notes. Do not use these in place of LIVE DASHBOARD readings or alarms:\n"
+            f"{note_text}"
+        )
     payload = {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -820,7 +997,7 @@ def build_reply(message: str, previous: str = "") -> dict:
         }
 
     try:
-        snapshot = load_snapshot()
+        snapshot, age = current_snapshot()
     except Exception as error:  # noqa: BLE001
         return {
             "reply": f"Could not read the dashboard ({error.__class__.__name__}: {error}).",
@@ -838,20 +1015,20 @@ def build_reply(message: str, previous: str = "") -> dict:
         }
 
     facts = build_facts(snapshot)
-    wording = gemini_reply(message, facts, previous)
-    if wording:
-        return {
-            "reply": wording,
-            "dashboard_online": True,
-            "engine": "gemini",
-            "sources": [path for path in READ_PATHS if path in snapshot],
-        }
-    return {
-        "reply": answer_from_facts(message, facts),
+    live_text = live_dashboard_text(snapshot, age)
+    wording = gemini_reply(message, facts, previous, live_text)
+    payload = {
         "dashboard_online": True,
-        "engine": "rules",
         "sources": [path for path in READ_PATHS if path in snapshot],
+        "snapshot_age_seconds": round(age, 1),
     }
+    if wording:
+        payload["reply"] = wording
+        payload["engine"] = "gemini"
+        return payload
+    payload["reply"] = answer_from_facts(message, facts)
+    payload["engine"] = "rules"
+    return payload
 
 
 class ChatHandler(BaseHTTPRequestHandler):
@@ -911,9 +1088,10 @@ class ChatHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    threading.Thread(target=_poll_loop, name="dashboard-poll", daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), ChatHandler)
     print(f"SCADA chatbot: http://{HOST}:{PORT}/")
-    print(f"Reads live data from {DASHBOARD}/ (start server2.py separately).")
+    print(f"Reads live data from {DASHBOARD}/ every {POLL_SECONDS:.0f}s (start server2.py separately).")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

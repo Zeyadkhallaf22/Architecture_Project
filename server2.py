@@ -12,7 +12,6 @@ Server controls (toggle / stress / reset) still write into the same SQL tables.
 from __future__ import annotations
 
 import csv
-import hmac
 import io
 import json
 import math
@@ -30,6 +29,10 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import urllib.parse
 import urllib.request
 import pyodbc
+
+from access.auth import authenticate
+from access.control_gate import authorize_control
+from ingestion.it_dataset import publish_server_sample
 
 try:
     from flask import Flask, jsonify
@@ -95,14 +98,12 @@ else:
 
 HOST = "127.0.0.1"
 PORT = 8000
-# First operator account. Move this into SQL Server when accounts are stored in the database.
-LOGIN_USERNAME = "mariamsalem"
-LOGIN_PASSWORD = "mariam1234"
 FACE_SERVICE_URL = "http://127.0.0.1:8003/check"
 FACE_PYTHON = Path(r"D:\AVEVA\backend2\SCADAPROJECT\.venv\Scripts\python.exe")
 POLL_SECONDS = 1.0
-# Advance one Kaggle dataset row per server on this interval (live playback)
-LIVE_DATASET_STEP_SECONDS = 5.0
+# Advance one dataset row per server on the same 45-second cycle as the dashboard UI.
+# A shorter step makes each chatbot answer pick up a different CPU / RAM / temperature.
+LIVE_DATASET_STEP_SECONDS = 45.0
 DATA_SOURCE_MODE = "IT_SYSTEM_DATASET_LIVE"  # not InTouch
 
 CONNECTION_STRING = (
@@ -901,6 +902,10 @@ def advance_it_dataset_live() -> bool:
                     """,
                     (server, rid, now, server, rid, now),
                 )
+                try:
+                    publish_server_sample(server, int(rid), float(cpu), float(temp), float(net), float(lat))
+                except Exception as publish_error:  # noqa: BLE001
+                    print(f"Event intake skipped: {publish_error}")
         return True
     except Exception as error:
         print(f"advance_it_dataset_live failed: {error}")
@@ -4440,8 +4445,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_dashboard_html(self, requested_path: str) -> None:
-        page = ROOT / "index.html" if requested_path in {"", "/"} else ROOT / requested_path.lstrip("/")
-        if not page.is_file() or page.suffix.lower() != ".html":
+        name = "index.html" if requested_path in {"", "/"} else Path(requested_path).name
+        page = ROOT / "frontend" / name
+        if name != Path(name).name or not page.is_file() or page.suffix.lower() != ".html":
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         body = page.read_bytes()
@@ -4639,6 +4645,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
 
         # Operational controls — write into SQL so all dashboard views update.
+        # Chatbot, analytics, and gestures are rejected before any write.
+        if request.path in {"/api/toggle", "/api/stress", "/api/reset"}:
+            if not self._control_allowed():
+                return
+
         if request.path == "/api/toggle":
             try:
                 server = int(query.get("server", ["1"])[0])
@@ -4691,6 +4702,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_dashboard_html(request.path)
             return
 
+        if request.path == "/dashboard-client.js":
+            script = ROOT / "frontend" / "dashboard-client.js"
+            if not script.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            body = script.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -4713,10 +4738,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         username = str(data.get("username") or "").strip()
         password = str(data.get("password") or "")
-        if not _same_secret(username, LOGIN_USERNAME) or not _same_secret(password, LOGIN_PASSWORD):
-            self.send_json({"ok": False, "error": "Wrong username or password"}, HTTPStatus.UNAUTHORIZED)
+        result = authenticate(username, password)
+        if not result.get("ok"):
+            self.send_json({"ok": False, "error": result.get("error") or "Wrong username or password"}, HTTPStatus.UNAUTHORIZED)
             return
-        self.send_json({"ok": True, "username": LOGIN_USERNAME})
+        self.send_json({"ok": True, "username": result["username"], "role": result.get("role") or ""})
+
+    def _control_allowed(self) -> bool:
+        caller = self.headers.get("X-Caller") or "hmi"
+        role = self.headers.get("X-Role") or ""
+        allowed, reason = authorize_control(caller, role or None)
+        if allowed:
+            return True
+        self.send_json({"success": False, "message": reason}, HTTPStatus.FORBIDDEN)
+        return False
 
     def _check_face(self, raw: bytes) -> None:
         denied = {"granted": False, "name": None, "role": None, "score": None, "message": "Access denied"}
@@ -4735,14 +4770,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception:
             payload = denied
         self.send_json(payload)
-
-
-def _same_secret(left: str, right: str) -> bool:
-    a = left.encode("utf-8")
-    b = right.encode("utf-8")
-    if len(a) != len(b):
-        return False
-    return hmac.compare_digest(a, b)
 
 
 # ============================================================

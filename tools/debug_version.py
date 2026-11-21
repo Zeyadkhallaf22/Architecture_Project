@@ -1,8 +1,6 @@
 """
 Data Center Dashboard Backend - SQL Express 2022 Version
-Architecture: SQL Express 2022 Database → Python Backend → Web Dashboard
-Run with: python server.py
-Then open http://localhost:8000/index.html
+Debug Version - Connection Troubleshooting
 """
 
 from __future__ import annotations
@@ -23,7 +21,9 @@ import pyodbc
 # DATABASE CONFIGURATION - SQL EXPRESS 2022
 # ============================================================
 
-# Use localhost with SQLEXPRESS (from your SSMS history)
+# Try different connection strings - UNCOMMENT ONE AT A TIME
+
+# Option 1: Using localhost with SQLEXPRESS (Recommended from your SSMS)
 CONNECTION_STRING = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
     'SERVER=localhost\\SQLEXPRESS;'
@@ -31,7 +31,15 @@ CONNECTION_STRING = (
     'Trusted_Connection=yes;'
 )
 
-# Alternative: Use MARIAM with SQLEXPRESS01
+# Option 2: Using MARIAM with SQLEXPRESS
+# CONNECTION_STRING = (
+#     'DRIVER={ODBC Driver 17 for SQL Server};'
+#     'SERVER=MARIAM\\SQLEXPRESS;'
+#     'DATABASE=DataCenterKPI;'
+#     'Trusted_Connection=yes;'
+# )
+
+# Option 3: Using MARIAM with SQLEXPRESS01
 # CONNECTION_STRING = (
 #     'DRIVER={ODBC Driver 17 for SQL Server};'
 #     'SERVER=MARIAM\\SQLEXPRESS01;'
@@ -39,7 +47,7 @@ CONNECTION_STRING = (
 #     'Trusted_Connection=yes;'
 # )
 
-# Alternative: Use MARIAM with MSSQLSERVER03
+# Option 4: Using MARIAM with MSSQLSERVER03
 # CONNECTION_STRING = (
 #     'DRIVER={ODBC Driver 17 for SQL Server};'
 #     'SERVER=MARIAM\\MSSQLSERVER03;'
@@ -47,7 +55,23 @@ CONNECTION_STRING = (
 #     'Trusted_Connection=yes;'
 # )
 
-ROOT = Path(__file__).resolve().parent
+# Option 5: Using localhost without instance name (default instance)
+# CONNECTION_STRING = (
+#     'DRIVER={ODBC Driver 17 for SQL Server};'
+#     'SERVER=localhost;'
+#     'DATABASE=DataCenterKPI;'
+#     'Trusted_Connection=yes;'
+# )
+
+# Option 6: Using IP address
+# CONNECTION_STRING = (
+#     'DRIVER={ODBC Driver 17 for SQL Server};'
+#     'SERVER=127.0.0.1\\SQLEXPRESS;'
+#     'DATABASE=DataCenterKPI;'
+#     'Trusted_Connection=yes;'
+# )
+
+ROOT = Path(__file__).resolve().parents[1]
 LOCK = threading.Lock()
 
 # ============================================================
@@ -116,14 +140,21 @@ db_connected = False
 def get_connection():
     """Create a connection to SQL Express 2022."""
     try:
-        conn = pyodbc.connect(CONNECTION_STRING, timeout=30)
+        print(f"🔌 Attempting to connect with: {CONNECTION_STRING}")
+        conn = pyodbc.connect(CONNECTION_STRING, timeout=10)
+        print("✅ Connection successful!")
         return conn
     except pyodbc.Error as e:
         print(f"❌ Database connection error: {e}")
+        # Print more details about the error
+        error_code = e.args[0] if e.args else "Unknown"
+        error_msg = e.args[1] if len(e.args) > 1 else "No message"
+        print(f"   Error Code: {error_code}")
+        print(f"   Error Message: {error_msg}")
         return None
 
 def test_database_connection():
-    """Test the database connection and display status."""
+    """Test the database connection with detailed debugging."""
     global db_connected
     
     print("\n" + "=" * 70)
@@ -131,28 +162,31 @@ def test_database_connection():
     print("=" * 70)
     
     # Test 1: Check if ODBC Driver is installed
+    print("\n📋 Checking ODBC Drivers...")
     try:
-        drivers = [x for x in pyodbc.drivers() if 'SQL Server' in x]
-        print(f"\n📋 Available ODBC Drivers:")
-        for driver in drivers:
+        all_drivers = pyodbc.drivers()
+        sql_drivers = [x for x in all_drivers if 'SQL Server' in x]
+        print(f"   Available SQL Server ODBC Drivers:")
+        for driver in sql_drivers:
             print(f"   - {driver}")
         
-        if 'ODBC Driver 17 for SQL Server' not in drivers:
+        if 'ODBC Driver 17 for SQL Server' not in sql_drivers:
             print("\n⚠️  Warning: ODBC Driver 17 for SQL Server not found!")
-            print("   Please install it from: https://go.microsoft.com/fwlink/?linkid=2249006")
+            print("   Available drivers:", sql_drivers)
+            print("   Please install ODBC Driver 17 from: https://go.microsoft.com/fwlink/?linkid=2249006")
             db_connected = False
             return False
+        else:
+            print("   ✅ ODBC Driver 17 for SQL Server is installed")
     except Exception as e:
         print(f"❌ Error checking drivers: {e}")
         db_connected = False
         return False
     
-    # Test 2: Try to connect
+    # Test 2: Try to connect with the specified connection string
     print("\n" + "-" * 70)
-    print("🔌 Attempting to connect to SQL Express 2022...")
-    print(f"   Server: localhost\\SQLEXPRESS")
-    print(f"   Database: DataCenterKPI")
-    print(f"   Authentication: Windows Authentication")
+    print("🔌 Attempting to connect to SQL Server...")
+    print(f"   Connection String: {CONNECTION_STRING}")
     print("-" * 70)
     
     try:
@@ -160,12 +194,13 @@ def test_database_connection():
         if conn is None:
             print("\n❌ Connection test FAILED!")
             print("   Could not establish connection to SQL Server")
-            print("\n   Troubleshooting tips:")
-            print("   1. Make sure SQL Server Express 2022 is running")
-            print("   2. Verify the server name is correct")
-            print("   3. Check if Windows Authentication is enabled")
-            print("   4. Verify the database 'DataCenterKPI' exists")
-            print("   5. Make sure TCP/IP is enabled in SQL Server Configuration")
+            print("\n   Common causes:")
+            print("   1. SQL Server service is not running")
+            print("   2. Incorrect server/instance name")
+            print("   3. Windows Authentication not enabled")
+            print("   4. Database 'DataCenterKPI' doesn't exist")
+            print("   5. TCP/IP protocol is disabled")
+            print("   6. Firewall is blocking the connection")
             db_connected = False
             return False
             
@@ -194,8 +229,8 @@ def test_database_connection():
                         cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
                         count = cursor.fetchone()[0]
                         print(f"   - {table_name}: {count} rows")
-                    except:
-                        print(f"   - {table_name}: (count unavailable)")
+                    except Exception as e:
+                        print(f"   - {table_name}: (count unavailable - {e})")
             else:
                 print("   (No tables found - database may need initialization)")
             
@@ -203,22 +238,28 @@ def test_database_connection():
             print("\n✅ SQL Express 2022 connection test PASSED!")
             return True
             
-    except Exception as e:
-        print(f"\n❌ Connection test FAILED!")
+    except pyodbc.Error as e:
+        print(f"\n❌ Connection test FAILED with pyodbc error!")
         print(f"   Error: {e}")
-        print("\n   Troubleshooting tips:")
-        print("   1. Make sure SQL Server Express 2022 is running")
-        print("   2. Verify the server name is correct")
-        print("   3. Check if Windows Authentication is enabled")
-        print("   4. Verify the database 'DataCenterKPI' exists")
-        print("   5. Make sure TCP/IP is enabled in SQL Server Configuration")
-        print("   6. Check if firewall is blocking the connection")
+        print(f"   Error Code: {e.args[0] if e.args else 'N/A'}")
+        if len(e.args) > 1:
+            print(f"   Error Message: {e.args[1]}")
+        db_connected = False
+        return False
+    except Exception as e:
+        print(f"\n❌ Connection test FAILED with unexpected error!")
+        print(f"   Error: {e}")
+        print(f"   Error Type: {type(e).__name__}")
         db_connected = False
         return False
 
 def init_database():
     """Initialize database tables if they don't exist."""
     global db_connected
+    
+    if not db_connected:
+        print("⚠️  Database not connected, skipping initialization")
+        return False
     
     try:
         conn = get_connection()
@@ -228,6 +269,8 @@ def init_database():
             
         with conn:
             cursor = conn.cursor()
+            
+            print("\n📦 Creating database tables if needed...")
             
             # Create ServerHistory table
             cursor.execute("""
@@ -245,6 +288,7 @@ def init_database():
                     RecordedAt DATETIME NULL DEFAULT GETDATE()
                 )
             """)
+            print("   ✅ ServerHistory table ready")
             
             # Create ServerMetrics table
             cursor.execute("""
@@ -265,6 +309,7 @@ def init_database():
                     RecordedAt DATETIME NULL DEFAULT GETDATE()
                 )
             """)
+            print("   ✅ ServerMetrics table ready")
             
             # Create AlarmEvents table
             cursor.execute("""
@@ -277,6 +322,7 @@ def init_database():
                     EventTime DATETIME NULL DEFAULT GETDATE()
                 )
             """)
+            print("   ✅ AlarmEvents table ready")
             
             # Create LatestTagValues table
             cursor.execute("""
@@ -287,6 +333,7 @@ def init_database():
                     UpdatedAt DATETIME NOT NULL DEFAULT GETDATE()
                 )
             """)
+            print("   ✅ LatestTagValues table ready")
             
             # Create ServerCPUWorkbench table
             cursor.execute("""
@@ -297,6 +344,7 @@ def init_database():
                     UpdatedAt DATETIME NOT NULL DEFAULT GETDATE()
                 )
             """)
+            print("   ✅ ServerCPUWorkbench table ready")
             
             # Create CurrentServerState table
             cursor.execute("""
@@ -312,6 +360,7 @@ def init_database():
                     Status BIT NULL
                 )
             """)
+            print("   ✅ CurrentServerState table ready")
             
             # Create indexes
             cursor.execute("""
@@ -323,6 +372,7 @@ def init_database():
                 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name='IX_ServerMetrics_ServerTime')
                 CREATE INDEX IX_ServerMetrics_ServerTime ON ServerMetrics (ServerNumber, RecordedAt DESC)
             """)
+            print("   ✅ Indexes created")
             
             conn.commit()
             db_connected = True
@@ -733,7 +783,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def send_dashboard_html(self, requested_path):
         if requested_path in ('/', ''):
-            page = ROOT / 'index.html'
+            page = ROOT / "frontend" / "index.html"
         else:
             page = ROOT / requested_path.lstrip('/')
         
@@ -912,115 +962,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
 # ============================================================
-# DATABASE TEST FUNCTION
-# ============================================================
-
-def test_sql_express():
-    """Test function to verify SQL Express 2022 connection."""
-    global db_connected
-    
-    print("\n" + "=" * 70)
-    print("🧪 TESTING SQL EXPRESS 2022 CONNECTION")
-    print("=" * 70)
-    
-    # Test 1: Check if ODBC Driver is installed
-    try:
-        drivers = [x for x in pyodbc.drivers() if 'SQL Server' in x]
-        print(f"\n📋 Available ODBC Drivers:")
-        for driver in drivers:
-            print(f"   - {driver}")
-        
-        if 'ODBC Driver 17 for SQL Server' not in drivers:
-            print("\n⚠️  Warning: ODBC Driver 17 for SQL Server not found!")
-            print("   Please install it from: https://go.microsoft.com/fwlink/?linkid=2249006")
-            db_connected = False
-            return False
-    except Exception as e:
-        print(f"❌ Error checking drivers: {e}")
-        db_connected = False
-        return False
-    
-    # Test 2: Try to connect
-    print("\n" + "-" * 70)
-    print("🔌 Attempting to connect to SQL Express 2022...")
-    print(f"   Server: localhost\\SQLEXPRESS")
-    print(f"   Database: DataCenterKPI")
-    print(f"   Authentication: Windows Authentication")
-    print("-" * 70)
-    
-    try:
-        conn = get_connection()
-        if conn is None:
-            print("\n❌ Connection test FAILED!")
-            print("   Could not establish connection to SQL Server")
-            print("\n   Troubleshooting tips:")
-            print("   1. Make sure SQL Server Express 2022 is running")
-            print("   2. Verify the server name is correct")
-            print("   3. Check if Windows Authentication is enabled")
-            print("   4. Verify the database 'DataCenterKPI' exists")
-            print("   5. Make sure TCP/IP is enabled in SQL Server Configuration")
-            db_connected = False
-            return False
-            
-        with conn:
-            cursor = conn.cursor()
-            
-            # Check if database exists
-            cursor.execute("SELECT DB_NAME()")
-            db_name = cursor.fetchone()[0]
-            print(f"✅ Connected to database: {db_name}")
-            
-            # Check tables
-            cursor.execute("""
-                SELECT TABLE_NAME 
-                FROM INFORMATION_SCHEMA.TABLES 
-                WHERE TABLE_TYPE = 'BASE TABLE'
-                ORDER BY TABLE_NAME
-            """)
-            tables = cursor.fetchall()
-            
-            print(f"\n📊 Tables in database:")
-            if tables:
-                for table in tables:
-                    table_name = table[0]
-                    try:
-                        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-                        count = cursor.fetchone()[0]
-                        print(f"   - {table_name}: {count} rows")
-                    except:
-                        print(f"   - {table_name}: (count unavailable)")
-            else:
-                print("   (No tables found - database may need initialization)")
-            
-            db_connected = True
-            print("\n✅ SQL Express 2022 connection test PASSED!")
-            return True
-            
-    except Exception as e:
-        print(f"\n❌ Connection test FAILED!")
-        print(f"   Error: {e}")
-        print("\n   Troubleshooting tips:")
-        print("   1. Make sure SQL Server Express 2022 is running")
-        print("   2. Verify the server name is correct")
-        print("   3. Check if Windows Authentication is enabled")
-        print("   4. Verify the database 'DataCenterKPI' exists")
-        print("   5. Make sure TCP/IP is enabled in SQL Server Configuration")
-        print("   6. Check if firewall is blocking the connection")
-        db_connected = False
-        return False
-
-# ============================================================
 # MAIN ENTRY POINT
 # ============================================================
 
 if __name__ == '__main__':
     print("=" * 70)
     print("🏢 DATA CENTER DASHBOARD BACKEND")
-    print("   SQL Express 2022 Version")
+    print("   SQL Express 2022 Version (Debug Mode)")
     print("=" * 70)
     
     # First, test the connection
-    test_sql_express()
+    test_database_connection()
     
     print("\n" + "=" * 70)
     print("⚙️  INITIALIZING APPLICATION")

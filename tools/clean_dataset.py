@@ -1,9 +1,13 @@
+from pathlib import Path
+
 import pandas as pd
+
+DATA = Path(__file__).resolve().parents[1] / "datasets"
 
 # ==========================
 # 1. Load Dataset
 # ==========================
-df = pd.read_csv("instance_usage_grouped_300_seconds_month.csv")
+df = pd.read_csv(DATA / "instance_usage_grouped_300_seconds_month.csv")
 
 print("Original Dataset Shape:", df.shape)
 
@@ -76,7 +80,7 @@ df.reset_index(drop=True, inplace=True)
 # ==========================
 # 9. Save Clean Dataset
 # ==========================
-df.to_csv("cleaned_instance_usage.csv", index=False)
+df.to_csv(DATA / "cleaned_instance_usage.csv", index=False)
 
 print("\nCleaning Finished Successfully!")
 print("Clean Dataset Shape:", df.shape)

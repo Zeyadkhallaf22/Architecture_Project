@@ -1,11 +1,14 @@
 import pandas as pd
 import random
+from pathlib import Path
+
+DATA = Path(__file__).resolve().parents[1] / "datasets"
 
 # =====================================================
 # STEP 1 - Load Dataset
 # =====================================================
 
-file_name = "instance_usage_grouped_300_seconds_month.csv"
+file_name = DATA / "instance_usage_grouped_300_seconds_month.csv"
 
 df = pd.read_csv(file_name)
 
@@ -243,7 +246,7 @@ print(df["Alarm"].value_counts())
 # STEP 18 - Save Dataset
 # =====================================================
 
-output = "DataCenter_AI_Dataset.csv"
+output = DATA / "DataCenter_AI_Dataset.csv"
 
 df.to_csv(output, index=False)
 

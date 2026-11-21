@@ -1,6 +1,6 @@
 # SCADA_PROJECT
 
-Implementing AI layer and IDS for SCADA Systems.
+AI investigation layer for a SCADA dashboard. This prototype runs on one PC. It does not include an IDS.
 
 # Schneider Electric · AVEVA — Data Center Monitoring Dashboard
 
@@ -54,25 +54,65 @@ pip install reportlab flask flask-cors
 python prepare_and_load_it_dataset.py
 ```
 
-3. Start the dashboard:
+3. Start everything on this PC with one command. Set `GEMINI_API_KEY` in the same PowerShell window first if the chatbot should use Gemini. The key stays in that window. It is not stored in the project.
 
 ```powershell
-python server2.py
+cd D:\AVEVA\backend2\backend2
+.\start.ps1
 ```
 
-4. Open **http://127.0.0.1:8000/**
+4. Open **http://127.0.0.1:8000/** and sign in. The demo account is `mariamsalem` / `mariam1234`. The Admin role is read from `Grad_role.csv`.
+
+The chatbot keeps answering from dashboard facts when Gemini is not configured. The dashboard and the replayed dataset keep running in that case.
+
+## Quality attributes from Milestone 1
+
+| Scenario | What this PC prototype does |
+|---|---|
+| 5.1 Performance | Replayed dataset rows become events with an id and a source time. A repeated id is ignored. |
+| 5.2 Reliability | Each replayed row is marked `replayed`, not as a live plant signal. |
+| 5.3 Security | Chatbot, analytics, and gestures cannot call toggle, stress, or reset. |
+| 5.4 Usability | Gestures stay in the local camera app and do not command the servers. |
+| 5.5 Traceability | Chatbot answers are built from dashboard records. Gemini only rewrites those facts when a key is set. |
+| 5.6 Modifiability | A new replay source is a new module in the `ingestion` package. The dashboard pages stay unchanged. |
+
+## Architecture conformance
+
+Each component is a package (a folder), a module (one file in a package), or a service (its own process and port). IDS is not part of this prototype. Analysis stays inside the backend service on this one PC.
+
+| Component | Kind | Where |
+|---|---|---|
+| Ingestion adapters | package | `ingestion/` |
+| IT dataset adapter | module | `ingestion/it_dataset.py` |
+| Application and access | package | `access/` |
+| Sign-in | module | `access/auth.py` |
+| Control gate | module | `access/control_gate.py` |
+| Evidence | package | `evidence/` |
+| Event hub | module | `evidence/hub.py` |
+| Replay label | module | `evidence/schema.py` |
+| Correlation and evidence backend | service | `server2.py` on port 8000 |
+| Explanation and assistant | service | `chatbot_server.py` on port 8001 |
+| Dashboard frontend | package | `frontend/` |
+| Gesture client | service | `SCADAPROJECT/vision_web.py` on port 8002 |
+
+`ingestion` may publish events. It cannot import `access`. `access` and `evidence` cannot import each other. The assistant service and the gesture service have no control route. `tests/test_architecture_conformance.py` checks those rules and fails if either service names `/api/toggle`, `/api/stress`, or `/api/reset`.
 
 ## Project layout
 
 ```
 backend2/
-├── index.html                 # Full dashboard UI
-├── server2.py                 # Main API + static server (port 8000)
-├── prepare_and_load_it_dataset.py
-├── assets/                    # Logos & SCADA backgrounds
-├── ai_service/                # Train / predict helpers
-├── database queries/          # SQL scripts
-└── requirments.txt
+├── frontend/                  # index.html, login.html, dashboard-client.js
+├── server2.py                 # Dashboard service (port 8000)
+├── chatbot_server.py          # Assistant service (port 8001)
+├── access/                    # Sign-in and control gate
+├── ingestion/                 # Replay adapter
+├── evidence/                  # Event hub and replay label
+├── datasets/                  # CSV files and the local database
+├── models/                    # model.pkl and scaler.pkl
+├── tools/                     # Load scripts and older server copies
+├── assets/                    # Logos and backgrounds
+├── ai_service/                # Train and predict helpers
+└── database queries/          # SQL scripts
 ```
 
 ## Keyboard shortcuts
