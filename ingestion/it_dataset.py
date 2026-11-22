@@ -1,10 +1,11 @@
-"""Module: map one replayed IT-dataset row into the common event model."""
+"""Module: map one replayed IT-dataset row into the IF-02 event envelope."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
-from evidence.hub import HUB
+from evidence.envelope import accept
 from evidence.schema import QUALITY_REPLAYED
 
 
@@ -15,15 +16,33 @@ def publish_server_sample(
     temp: float,
     network_mbps: float,
     latency_ms: float,
-) -> None:
-    base: dict[str, Any] = {
-        "sourceId": "ITSystemDataset",
-        "server": int(server),
+) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
+    asset = f"server-{int(server)}"
+    payload = {
         "cpuPercent": float(cpu),
         "tempC": float(temp),
         "networkMbps": float(network_mbps),
         "latencyMs": float(latency_ms),
-        "qualityStatus": QUALITY_REPLAYED,
     }
-    HUB.publish({**base, "eventId": f"proc-{server}-{row_id}", "eventType": "process.reading"})
-    HUB.publish({**base, "eventId": f"net-{server}-{row_id}", "eventType": "network.observation"})
+    results = []
+    for event_type, event_id in (
+        ("process.reading", f"proc-{server}-{row_id}"),
+        ("network.observation", f"net-{server}-{row_id}"),
+    ):
+        results.append(
+            accept(
+                {
+                    "eventId": event_id,
+                    "sourceId": "ITSystemDataset",
+                    "assetId": asset,
+                    "eventType": event_type,
+                    "observedAt": now,
+                    "receivedAt": now,
+                    "qualityStatus": QUALITY_REPLAYED,
+                    "payload": payload,
+                    "evidenceRef": event_id,
+                }
+            )
+        )
+    return results

@@ -1025,9 +1025,17 @@ def build_reply(message: str, previous: str = "") -> dict:
     if wording:
         payload["reply"] = wording
         payload["engine"] = "gemini"
-        return payload
-    payload["reply"] = answer_from_facts(message, facts)
-    payload["engine"] = "rules"
+    else:
+        payload["reply"] = answer_from_facts(message, facts)
+        payload["engine"] = "rules"
+    payload["evidence"] = [
+        {"evidenceId": f"fact-{index}", "text": fact["text"]}
+        for index, fact in enumerate(facts, start=1)
+    ]
+    payload["limitations"] = [
+        "IDS evidence is unavailable. No detections were created.",
+        "The answer uses the latest dashboard records only.",
+    ]
     return payload
 
 
@@ -1065,7 +1073,7 @@ class ChatHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path != "/api/chat":
+        if path not in {"/api/chat", "/api/v1/queries"}:
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length", "0") or 0)

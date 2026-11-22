@@ -19,6 +19,7 @@ import random
 import subprocess
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from http import HTTPStatus
@@ -30,8 +31,10 @@ import urllib.parse
 import urllib.request
 import pyodbc
 
+from access.audit import record as audit_record
 from access.auth import authenticate
 from access.control_gate import authorize_control
+from evidence.query import ids_evidence, operational_evidence
 from ingestion.it_dataset import publish_server_sample
 
 try:
@@ -3817,7 +3820,31 @@ def build_report_preview(options: dict[str, Any]) -> dict[str, Any]:
         "sql_rows": sql_table,
         "history_table": build_db_status().get("history_table"),
         "briefing": briefing,
+        "reportId": "report-" + datetime.now().strftime("%Y%m%d%H%M%S"),
+        "claims": _report_claims(sql_table),
+        "limitations": [
+            "IDS evidence is unavailable. No security detections were added.",
+            "Readings are replayed dataset rows, marked replayed rather than live plant signals.",
+        ],
     }
+
+
+def _report_claims(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    claims: list[dict[str, str]] = []
+    for index, row in enumerate(rows, start=1):
+        stamp = row.get("timestamp")
+        server = row.get("server")
+        if not stamp or server is None:
+            continue
+        evidence_id = f"obs-server-{server}-{stamp}"
+        claims.append(
+            {
+                "claimId": f"claim-{index}",
+                "text": f"Server {server} at {stamp} recorded CPU {row.get('cpu')} percent.",
+                "evidenceId": evidence_id,
+            }
+        )
+    return claims
 
 
 def report_options(query: dict[str, list[str]]) -> dict[str, Any]:
@@ -4602,6 +4629,28 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json(build_db_status())
             return
 
+        if request.path == "/api/v1/session":
+            user = (self.headers.get("X-User") or "").strip()
+            role = (self.headers.get("X-Role") or "").strip()
+            if not user:
+                self.send_json(
+                    {"ok": False, "code": "UNAUTHENTICATED", "message": "Sign in again."},
+                    HTTPStatus.UNAUTHORIZED,
+                )
+                return
+            self.send_json({"ok": True, "username": user, "role": role})
+            return
+
+        if request.path == "/api/v1/evidence":
+            asset = (query.get("assetId") or [""])[0]
+            event_type = (query.get("eventType") or [""])[0]
+            self.send_json(operational_evidence(asset, event_type))
+            return
+
+        if request.path == "/api/v1/ids/evidence":
+            self.send_json(ids_evidence(), HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+
         if request.path == "/api/report/preview":
             options = report_options(query)
             self.send_json(build_report_preview(options))
@@ -4610,6 +4659,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if request.path == "/api/report":
             options = report_options(query)
             export_format = query.get("format", ["pdf"])[0].lower()
+            audit_record("hmi", "report-export", "requested", export_format)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             try:
                 if export_format == "csv":
@@ -4654,38 +4704,38 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 server = int(query.get("server", ["1"])[0])
             except ValueError:
-                self.send_json({"success": False, "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
+                self._send_control({"success": False, "code": "INVALID_REQUEST", "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
                 return
             try:
-                self.send_json(toggle_server(server))
+                self._send_control(toggle_server(server))
             except Exception as error:
-                self.send_json({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                self._send_control({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         if request.path == "/api/stress":
             try:
                 server = int(query.get("server", ["1"])[0])
             except ValueError:
-                self.send_json({"success": False, "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
+                self._send_control({"success": False, "code": "INVALID_REQUEST", "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
                 return
             try:
                 result = stress_server(server)
                 status = HTTPStatus.OK if result.get("success") else HTTPStatus.CONFLICT
-                self.send_json(result, status)
+                self._send_control(result, status)
             except Exception as error:
-                self.send_json({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                self._send_control({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         if request.path == "/api/reset":
             try:
                 server = int(query.get("server", ["1"])[0])
             except ValueError:
-                self.send_json({"success": False, "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
+                self._send_control({"success": False, "code": "INVALID_REQUEST", "message": "Invalid server parameter"}, HTTPStatus.BAD_REQUEST)
                 return
             try:
-                self.send_json(reset_server(server))
+                self._send_control(reset_server(server))
             except Exception as error:
-                self.send_json({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                self._send_control({"success": False, "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         if request.path == "/api/toggle_simulation":
@@ -4728,30 +4778,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if request.path == "/api/face":
             self._check_face(raw)
             return
-        if request.path != "/api/login":
-            self.send_json({"ok": False, "error": "Not found"}, HTTPStatus.NOT_FOUND)
+        if request.path not in {"/api/login", "/api/v1/auth/session"}:
+            self.send_json({"ok": False, "code": "NOT_FOUND", "error": "Not found"}, HTTPStatus.NOT_FOUND)
             return
         try:
             data = json.loads(raw.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            self.send_json({"ok": False, "error": "Invalid request"}, HTTPStatus.BAD_REQUEST)
+            self.send_json({"ok": False, "code": "INVALID_REQUEST", "error": "Invalid request"}, HTTPStatus.BAD_REQUEST)
             return
         username = str(data.get("username") or "").strip()
         password = str(data.get("password") or "")
         result = authenticate(username, password)
         if not result.get("ok"):
-            self.send_json({"ok": False, "error": result.get("error") or "Wrong username or password"}, HTTPStatus.UNAUTHORIZED)
+            audit_record(username or "unknown", "sign-in", "denied")
+            self.send_json(
+                {"ok": False, "code": "UNAUTHENTICATED", "error": result.get("error") or "Wrong username or password"},
+                HTTPStatus.UNAUTHORIZED,
+            )
             return
+        audit_record(str(result["username"]), "sign-in", "accepted", str(result.get("role") or ""))
         self.send_json({"ok": True, "username": result["username"], "role": result.get("role") or ""})
 
     def _control_allowed(self) -> bool:
+        self._control_request_id = uuid.uuid4().hex[:12]
         caller = self.headers.get("X-Caller") or "hmi"
         role = self.headers.get("X-Role") or ""
         allowed, reason = authorize_control(caller, role or None)
         if allowed:
             return True
-        self.send_json({"success": False, "message": reason}, HTTPStatus.FORBIDDEN)
+        audit_record(caller, "control", "FORBIDDEN", reason)
+        self.send_json(
+            {"success": False, "code": "FORBIDDEN", "requestId": self._control_request_id, "message": reason},
+            HTTPStatus.FORBIDDEN,
+        )
         return False
+
+    def _send_control(self, result: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
+        payload = dict(result)
+        payload["requestId"] = getattr(self, "_control_request_id", "")
+        payload.setdefault("code", "ACCEPTED" if payload.get("success") else "SAFETY_CHECK_FAILED")
+        audit_record("hmi", "control", str(payload["code"]), str(payload.get("message") or ""))
+        self.send_json(payload, status)
 
     def _check_face(self, raw: bytes) -> None:
         denied = {"granted": False, "name": None, "role": None, "score": None, "message": "Access denied"}

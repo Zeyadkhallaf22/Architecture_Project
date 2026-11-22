@@ -5075,6 +5075,7 @@ document.getElementById('rp-sql-refresh')?.addEventListener('click', loadReportS
 document.getElementById('rp-sql-server')?.addEventListener('change', loadReportSqlTable);
 
 const VISION_ORIGIN = "http://127.0.0.1:8002";
+let lastGestureMs = null;
 
 async function pullVision(){
   const frame = document.getElementById("visionFrame");
@@ -5100,6 +5101,11 @@ async function pullVision(){
     userEl.textContent = user ? `${user.name} · ${user.role || "operator"}` : (data.reason || "No face");
     const gesture = data.gesture || "no hand";
     gestureEl.textContent = data.event && data.event !== gesture ? `${gesture} → ${String(data.event).replaceAll("_", " ")}` : gesture;
+    if ((data.event === "scroll_up" || data.event === "scroll_down") && data.event_ms != null && data.event_ms !== lastGestureMs) {
+      lastGestureMs = data.event_ms;
+      const scroller = document.scrollingElement || document.documentElement;
+      scroller.scrollBy({ top: data.event === "scroll_down" ? 320 : -320, behavior: "smooth" });
+    }
     const bits = [data.section, data.armed ? "interaction active" : "palm required to arm"];
     if (data.alarm_count != null) bits.push(`${data.alarm_count} simulated alarms`);
     sectionEl.textContent = bits.filter(Boolean).join(" · ");

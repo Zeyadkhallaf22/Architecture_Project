@@ -14,6 +14,7 @@ class EventHub:
         self._lock = threading.Lock()
         self._handlers: dict[str, list[EventHandler]] = {}
         self._seen: set[str] = set()
+        self._records: list[dict[str, Any]] = []
 
     def subscribe(self, event_type: str, handler: EventHandler) -> None:
         with self._lock:
@@ -27,10 +28,17 @@ class EventHub:
                 return False
             if event_id:
                 self._seen.add(event_id)
+            self._records.append(dict(event))
+            if len(self._records) > 500:
+                self._records = self._records[-500:]
             handlers = list(self._handlers.get(event_type, ()))
         for handler in handlers:
             handler(dict(event))
         return True
+
+    def records(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(item) for item in self._records]
 
 
 HUB = EventHub()

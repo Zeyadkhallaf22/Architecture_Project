@@ -76,6 +76,12 @@ The chatbot keeps answering from dashboard facts when Gemini is not configured. 
 | 5.5 Traceability | Chatbot answers are built from dashboard records. Gemini only rewrites those facts when a key is set. |
 | 5.6 Modifiability | A new replay source is a new module in the `ingestion` package. The dashboard pages stay unchanged. |
 
+The running interfaces follow Milestone 2. `POST /api/login` and `POST /api/v1/auth/session` sign the user in. Replayed rows enter through the IF-02 envelope. `GET /api/v1/evidence` reads those records. `GET /api/v1/ids/evidence` returns unavailable and an empty list. `POST /api/v1/queries` on port 8001 answers from dashboard facts. A vertical hand move sends `scroll_up` or `scroll_down` and the dashboard scrolls. Toggle, stress, and reset stay on the separate control path and each attempt is audited.
+
+```powershell
+python -m unittest tests.test_architecture_boundaries tests.test_architecture_conformance
+```
+
 ## Architecture conformance
 
 Each component is a package (a folder), a module (one file in a package), or a service (its own process and port). IDS is not part of this prototype. Analysis stays inside the backend service on this one PC.

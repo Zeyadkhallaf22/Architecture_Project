@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import unittest
 
+from access.audit import entries, record
 from access.auth import authenticate, role_for_name
 from access.control_gate import authorize_control
+from evidence.envelope import accept
 from evidence.hub import EventHub
+from evidence.query import ids_evidence
 
 
 class BoundaryTests(unittest.TestCase):
@@ -39,6 +42,34 @@ class BoundaryTests(unittest.TestCase):
         self.assertTrue(hub.publish(event))
         self.assertFalse(hub.publish(event))
         self.assertEqual(seen, ["proc-1-9"])
+
+    def test_intake_rejects_a_broken_event_and_ignores_a_repeat(self) -> None:
+        rejected = accept({"eventId": "bad-1"})
+        self.assertEqual(rejected["code"], "INVALID_EVENT")
+        complete = {
+            "eventId": "proc-test-1",
+            "sourceId": "ITSystemDataset",
+            "assetId": "server-1",
+            "eventType": "process.reading",
+            "observedAt": "2026-11-22T00:00:00+00:00",
+            "receivedAt": "2026-11-22T00:00:00+00:00",
+            "qualityStatus": "replayed",
+            "payload": {"cpuPercent": 10},
+            "evidenceRef": "proc-test-1",
+        }
+        self.assertEqual(accept(complete)["status"], "accepted")
+        self.assertEqual(accept(complete)["code"], "DUPLICATE_EVENT")
+
+    def test_ids_query_returns_no_invented_detections(self) -> None:
+        result = ids_evidence()
+        self.assertEqual(result["code"], "DEPENDENCY_UNAVAILABLE")
+        self.assertEqual(result["records"], [])
+
+    def test_audit_records_the_action_and_not_a_secret(self) -> None:
+        item = record("mariamsalem", "sign-in", "denied")
+        self.assertNotIn("password", item)
+        self.assertEqual(entries()[-1]["outcome"], "denied")
+
 
 if __name__ == "__main__":
     unittest.main()
