@@ -32,10 +32,16 @@ import urllib.request
 import pyodbc
 
 from access.audit import record as audit_record
-from access.auth import authenticate
+from access.auth import authenticate, authenticate_fallback
+from access.email_mfa import issue_email_code, verify_email_code
 from access.control_gate import authorize_control
-from evidence.query import ids_evidence, operational_evidence
+from evidence.envelope import configure_hub
+from evidence.hub import HUB
+from evidence.query import operational_evidence
+from evidence.rabbit import RabbitBroker
 from ingestion.it_dataset import publish_server_sample
+from intelligence.ids import findings as ids_findings
+from intelligence.ids import install as install_ids
 
 try:
     from flask import Flask, jsonify
@@ -3823,8 +3829,8 @@ def build_report_preview(options: dict[str, Any]) -> dict[str, Any]:
         "reportId": "report-" + datetime.now().strftime("%Y%m%d%H%M%S"),
         "claims": _report_claims(sql_table),
         "limitations": [
-            "IDS evidence is unavailable. No security detections were added.",
             "Readings are replayed dataset rows, marked replayed rather than live plant signals.",
+            "Security findings are included only when a detection module recorded one.",
         ],
     }
 
@@ -4648,7 +4654,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
 
         if request.path == "/api/v1/ids/evidence":
-            self.send_json(ids_evidence(), HTTPStatus.SERVICE_UNAVAILABLE)
+            self.send_json(ids_findings())
             return
 
         if request.path == "/api/report/preview":
@@ -4778,7 +4784,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if request.path == "/api/face":
             self._check_face(raw)
             return
-        if request.path not in {"/api/login", "/api/v1/auth/session"}:
+        if request.path not in {"/api/login", "/api/v1/auth/session", "/api/v1/auth/mfa", "/api/v1/auth/mfa/email"}:
             self.send_json({"ok": False, "code": "NOT_FOUND", "error": "Not found"}, HTTPStatus.NOT_FOUND)
             return
         try:
@@ -4788,7 +4794,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         username = str(data.get("username") or "").strip()
         password = str(data.get("password") or "")
-        result = authenticate(username, password)
+        if request.path == "/api/v1/auth/mfa/email":
+            result = issue_email_code(username, password, str(data.get("email") or ""))
+            if result.get("ok"):
+                audit_record(str(result["username"]), "email-code", "sent")
+                self.send_json({"ok": True, "username": result["username"], "role": result.get("role") or ""})
+                return
+        elif request.path == "/api/v1/auth/mfa" and str(data.get("method") or "code") == "email":
+            result = verify_email_code(username, password, str(data.get("code") or ""))
+        elif request.path == "/api/v1/auth/mfa":
+            result = authenticate_fallback(username, password, str(data.get("code") or ""))
+        else:
+            result = authenticate(username, password)
         if not result.get("ok"):
             audit_record(username or "unknown", "sign-in", "denied")
             self.send_json(
@@ -4862,10 +4879,27 @@ def start_face_service() -> None:
     print("Starting OpenCV face recognition on http://127.0.0.1:8003/health")
 
 
+def start_broker() -> None:
+    """Connect the event path to RabbitMQ. Detection subscribes on that broker."""
+    try:
+        broker = RabbitBroker()
+        broker.start()
+        configure_hub(broker)
+        install_ids(broker)
+        broker.listen()
+        print(f"RabbitMQ broker: {broker.url} exchange visionhmi.events")
+    except Exception as error:  # noqa: BLE001
+        configure_hub(HUB)
+        install_ids(HUB)
+        print(f"RabbitMQ is not reachable ({error}).")
+        print("Install and start RabbitMQ, then restart this server. Until then events stay in-process.")
+
+
 def main() -> None:
     print("=" * 72)
     print("DATA CENTER DASHBOARD — IT System Performance LIVE (SQL Express)")
     print("=" * 72)
+    start_broker()
     start_face_service()
     test_database_connection()
     if db_connected:

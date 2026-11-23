@@ -338,6 +338,210 @@ html[data-theme="dark"] .themeswitch .knob{ transform:translateX(21px); backgrou
 .rowbtns{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:7px; }
 .rowbtns .btn{ justify-content:center; padding:8px 4px; font-size:11px; }
 
+/* Overview fills the page. Colors stay the dashboard cyan, green, amber, and red. */
+body:has(#view-overview.active) .main{
+  height:100vh; max-height:100vh; display:flex; flex-direction:column;
+  overflow:hidden; padding:12px 16px 12px;
+}
+body:has(#view-overview.active) .topbar{ margin-bottom:10px; flex:0 0 auto; }
+#view-overview.active{
+  flex:1 1 auto; min-height:0; display:flex !important; flex-direction:column;
+  background:transparent;
+}
+#view-overview .ov-hero,
+#view-overview .server-card,
+#view-overview .ov-dock,
+#view-overview .ov-status{
+  position:relative; overflow:hidden;
+  background:linear-gradient(165deg, color-mix(in srgb, var(--accent) 16%, transparent), rgba(6,14,24,.22) 42%, rgba(6,14,24,.38));
+  border:1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius:18px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), inset 0 -18px 28px rgba(61,224,255,.04), var(--frame-glow);
+  backdrop-filter:blur(18px) saturate(1.45);
+  -webkit-backdrop-filter:blur(18px) saturate(1.45);
+  transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+#view-overview .ov-hero::before,
+#view-overview .server-card::before,
+#view-overview .ov-dock::before,
+#view-overview .ov-status::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(115deg, rgba(255,255,255,.16), transparent 34%);
+}
+#view-overview .ov-hero{ flex:0 0 auto; padding:16px 20px 14px; }
+#view-overview .ov-kpis{
+  display:grid; grid-template-columns:repeat(7,1fr); gap:10px;
+  padding-bottom:12px; margin-bottom:12px;
+  border-bottom:1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+#view-overview .ov-kpi{ background:transparent; border:0; box-shadow:none; padding:2px 6px; text-align:center; }
+#view-overview .ov-kpi .lbl{
+  font-size:12px; letter-spacing:.14em; font-weight:600; color:var(--text-dim);
+}
+#view-overview .ov-kpi .val{
+  font-family:var(--font-mono); font-size:36px; font-weight:600; margin-top:6px; line-height:1;
+  color:var(--accent);
+}
+#view-overview .ov-kpi .unit{ font-size:15px; font-weight:600; margin-left:2px; color:inherit; }
+#view-overview #s-online,
+#view-overview .ov-kpi.ok .val{ color:var(--ok); }
+#view-overview #s-avgram{ color:#9ad8ff; }
+#view-overview .ov-kpi.warn .val{ color:var(--warn); }
+#view-overview .ov-kpi.crit .val{ color:var(--crit); }
+#view-overview .ov-perf h3{
+  margin:0 0 10px; font-size:13px; font-weight:500; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--text); text-shadow:none;
+}
+#view-overview .metric-bar-row{
+  display:grid; grid-template-columns:88px 1fr auto; gap:14px; align-items:center;
+  margin:0 0 9px;
+}
+#view-overview .metric-bar-row:last-child{ margin-bottom:0; }
+#view-overview .metric-bar-row .name{ color:var(--text-dim); font-size:15px; font-weight:600; }
+#view-overview .metric-bar-row .num{ font-family:var(--font-mono); color:var(--text); font-size:15px; min-width:64px; text-align:right; }
+#view-overview .bar-track{
+  height:10px; background:rgba(61,224,255,.08); border:0;
+  box-shadow:inset 0 0 0 1px rgba(61,224,255,.12);
+}
+#view-overview #bar-cpu{ background:linear-gradient(90deg,#147a99,var(--accent)); }
+#view-overview #bar-ram{ background:linear-gradient(90deg,#3d6f88,#9ad8ff); }
+#view-overview #bar-disk{ background:linear-gradient(90deg,#b8860b,var(--warn)); }
+#view-overview #bar-net{ background:linear-gradient(90deg,#0f8f5b,var(--ok)); }
+#view-overview .ov-links{ flex:0 0 46px; height:46px; position:relative; margin:0 8px; }
+#view-overview .ov-links svg{ width:100%; height:100%; display:block; overflow:visible; }
+#view-overview .ov-links path{
+  fill:none; stroke:var(--accent); stroke-width:2;
+  filter:drop-shadow(0 0 6px rgba(61,224,255,.75));
+}
+#view-overview .ov-links .hub{
+  position:absolute; left:50%; top:0; width:8px; height:8px; border-radius:50%;
+  transform:translate(-50%,-30%); background:var(--accent); box-shadow:0 0 12px var(--accent);
+}
+#view-overview #overview-servers{
+  flex:1 1 auto; min-height:0;
+  display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:0;
+}
+#view-overview .server-card{
+  height:100%; min-height:0; padding:16px 16px 12px;
+  display:flex; flex-direction:column; cursor:pointer;
+}
+#view-overview .server-card:hover{
+  transform:translateY(-4px);
+  background:linear-gradient(165deg, color-mix(in srgb, var(--accent) 24%, transparent), rgba(6,14,24,.28) 46%, rgba(6,14,24,.42));
+}
+#view-overview .server-card:active{ transform:translateY(-1px) scale(.985); }
+#view-overview .server-card:focus-visible{
+  outline:2px solid var(--accent); outline-offset:3px;
+}
+#view-overview .ov-hero:hover,
+#view-overview .ov-dock:hover,
+#view-overview .ov-status:hover{
+  transform:translateY(-2px);
+  background:linear-gradient(165deg, color-mix(in srgb, var(--accent) 22%, transparent), rgba(6,14,24,.26) 46%, rgba(6,14,24,.4));
+}
+#view-overview .ov-status{ cursor:default; }
+#view-overview .server-card > *,
+#view-overview .ov-hero > *,
+#view-overview .ov-dock > *,
+#view-overview .ov-status > *{ position:relative; z-index:1; }
+#view-overview .server-card .head{ margin-bottom:10px; }
+#view-overview .server-card .head h4{
+  font-size:18px; font-weight:600; letter-spacing:.02em; color:var(--text);
+}
+#view-overview .ov-srv-mark{
+  width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent);
+}
+#view-overview .server-card .stpill{
+  border-radius:99px; padding:4px 10px 4px 8px; font-size:11px; letter-spacing:.08em;
+}
+#view-overview .server-card .stpill.up{ background:var(--ok-soft); color:var(--ok); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ok) 45%, transparent); }
+#view-overview .server-card .stpill.down{ background:var(--crit-soft); color:var(--crit); }
+#view-overview .mini-grid{ gap:8px; margin-bottom:8px; }
+#view-overview .mini{ background:transparent; border:0; padding:0; }
+#view-overview .mini .l{ color:var(--text-faint); font-size:11px; letter-spacing:.08em; }
+#view-overview .mini{ min-width:0; }
+#view-overview .mini .v{ color:var(--text); font-size:clamp(14px, 1.15vw, 20px); font-weight:600; white-space:nowrap; }
+#view-overview .spark-wrap{ flex:1 1 auto; min-height:64px; margin:0 0 8px; display:flex; flex-direction:column; }
+#view-overview .spark-wrap .lbl{ color:var(--text-faint); letter-spacing:.1em; }
+#view-overview canvas.spark{ flex:1 1 auto; width:100%; height:100%; min-height:64px; }
+#view-overview .chips{ margin-bottom:8px; }
+#view-overview .chip{ background:transparent; border-color:color-mix(in srgb, var(--accent) 28%, transparent); color:var(--text-dim); }
+#view-overview .rowbtns{ gap:6px; margin-top:auto; }
+#view-overview .rowbtns .btn{
+  background:transparent; border:1px solid color-mix(in srgb, var(--accent) 32%, transparent); color:var(--text);
+  border-radius:999px; padding:7px 4px;
+}
+#view-overview .ov-dock{
+  flex:0 0 auto; margin-top:12px; padding:12px;
+  display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+}
+#view-overview .ov-status{
+  display:flex; align-items:center; gap:10px; min-width:150px;
+  padding:8px 12px; border-radius:14px;
+}
+#view-overview .ov-status .ov-ic{
+  width:32px; height:32px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--info-soft); color:var(--accent); font-size:16px;
+}
+#view-overview .ov-status b{ display:block; font-size:13px; color:var(--text); font-weight:600; }
+#view-overview .ov-status .state{ font-size:13px; font-weight:700; margin:0; }
+#view-overview .ov-status .state.ok{ color:var(--ok); }
+#view-overview .ov-status .state.warn{ color:var(--warn); }
+#view-overview .ov-status .state.crit{ color:var(--crit); }
+#view-overview .ov-status p{ display:none; }
+#view-overview .ov-actions{
+  display:flex; flex-wrap:wrap; gap:8px; margin-left:auto;
+  flex:1 1 320px; min-width:0; justify-content:flex-end;
+}
+#view-overview .action-btn{
+  flex-direction:row; align-items:center; gap:8px; border-radius:999px;
+  padding:10px 16px; font-size:14px; font-weight:650; color:#04121a;
+  border:1px solid transparent;
+}
+#view-overview .action-btn .ic{ font-size:15px; }
+#view-overview .action-btn.a1{ background:var(--accent); }
+#view-overview .action-btn.a2{ background:var(--ok); }
+#view-overview .action-btn.a3{ background:var(--warn); }
+#view-overview .action-btn.a4,
+#view-overview .action-btn.a5{
+  background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--accent);
+  border-color:color-mix(in srgb, var(--accent) 45%, transparent);
+  backdrop-filter:blur(10px);
+}
+#view-overview .ov-hero:hover,
+#view-overview .server-card:hover,
+#view-overview .ov-dock:hover,
+#view-overview .ov-status:hover,
+#view-overview .action-btn:hover{
+  border-color:color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 16px 34px -16px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+html[data-theme="light"] #view-overview .ov-hero,
+html[data-theme="light"] #view-overview .server-card,
+html[data-theme="light"] #view-overview .ov-dock,
+html[data-theme="light"] #view-overview .ov-status,
+html[data-theme="light"] #view-overview .server-card:hover,
+html[data-theme="light"] #view-overview .ov-hero:hover,
+html[data-theme="light"] #view-overview .ov-dock:hover,
+html[data-theme="light"] #view-overview .ov-status:hover{
+  background:linear-gradient(165deg, rgba(255,255,255,.86), rgba(255,255,255,.55));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), var(--shadow);
+}
+html[data-theme="light"] #view-overview .bar-track{ background:rgba(11,109,143,.08); }
+@media (max-width:1100px){
+  body:has(#view-overview.active) .main{ height:auto; max-height:none; overflow:auto; }
+  #view-overview.active{ display:block !important; }
+  #view-overview .ov-kpis{ grid-template-columns:repeat(4,1fr); }
+  #view-overview #overview-servers{ grid-template-columns:repeat(2,1fr); }
+  #view-overview .server-card{ height:auto; }
+  #view-overview .ov-links{ display:none; }
+}
+@media (max-width:700px){
+  #view-overview .ov-kpis,
+  #view-overview #overview-servers{ grid-template-columns:1fr 1fr; }
+  #view-overview .ov-actions{ margin-left:0; }
+}
+
 /* ---- scope charts (PLC line + workbench bars) ---- */
 .scope-wrap{
   background:linear-gradient(165deg, rgba(6,16,28,.42), rgba(4,10,18,.28));
@@ -696,6 +900,44 @@ html[data-theme="light"] body.tlm-scada .topbar .pill{
 .tlm-legend i{ width:10px; height:10px; border-radius:2px; display:inline-block; flex:0 0 auto; box-shadow:0 0 8px currentColor; }
 .tlm-legend b{ color:var(--tlm-cyan); font-family:var(--font-mono); font-weight:700; font-size:16px; }
 
+.panel,
+.stat,
+.status-card,
+.server-card,
+.kpi-card,
+.ai-kpi-card,
+.alarm-status-card,
+.tlm-card,
+.tlm-kpi,
+.sust-cc-card,
+.oee-cc-card,
+.scope-wrap,
+.cmp-server,
+.cmp-metric,
+.rec-item{
+  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.panel:hover,
+.stat:hover,
+.status-card:hover,
+.server-card:hover,
+.kpi-card:hover,
+.ai-kpi-card:hover,
+.alarm-status-card:hover,
+.tlm-card:hover,
+.tlm-kpi:hover,
+.sust-cc-card:hover,
+.oee-cc-card:hover,
+.scope-wrap:hover,
+.cmp-server:hover,
+.cmp-metric:hover,
+.rec-item:hover{
+  border-color:color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 14px 34px -18px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
 .tlm-risk-click{ cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .12s ease; }
 .tlm-risk-click:hover{
   border-color:rgba(255,90,90,.35);
@@ -886,9 +1128,9 @@ html[data-theme="light"] #view-sustain .sust-cc-header h3{ text-shadow:none; }
   padding:0 2px; width:100%; max-width:none; min-width:0; min-height:0;
 }
 .sust-gauge .g-canvas-wrap{
-  width:100%; flex:1 1 auto; min-height:120px; position:relative;
+  width:100%; height:168px; min-height:168px; position:relative;
 }
-.sust-gauge canvas{ width:100%; height:100%; display:block; }
+.sust-gauge canvas{ width:100%; height:100%; display:block; image-rendering:auto; }
 .sust-gauge .g-name{
   font-family:'Exo 2',sans-serif; font-size:12px; letter-spacing:.1em;
   text-transform:uppercase; color:var(--text-dim); margin-top:2px; font-weight:500;
@@ -919,18 +1161,18 @@ html[data-theme="light"] #view-sustain .sust-cc-header h3{ text-shadow:none; }
 }
 .sust-cc-split .pane{ display:flex; flex-direction:column; min-height:0; }
 .sust-cc-split .pane .chart-wrap{
-  flex:1 1 auto; min-height:120px; position:relative; width:100%;
+  flex:0 0 auto; height:210px; min-height:210px; position:relative; width:100%;
 }
-.sust-cc-split .pane .chart-wrap canvas{ width:100%; height:100%; display:block; }
+.sust-cc-split .pane .chart-wrap canvas{ width:100%; height:100%; display:block; image-rendering:auto; }
 
-.sust-cc-canvas{ position:relative; width:100%; flex:1 1 auto; min-height:120px; }
-.sust-cc-canvas canvas{ width:100%; height:100%; display:block; }
-.sust-cc-canvas.tall{ min-height:130px; }
+.sust-cc-canvas{ position:relative; width:100%; height:220px; min-height:220px; flex:0 0 auto; }
+.sust-cc-canvas canvas{ width:100%; height:100%; display:block; image-rendering:auto; }
+.sust-cc-canvas.tall{ height:220px; min-height:220px; }
 
 .sust-pie-wrap{
-  position:relative; width:100%; flex:1 1 auto; min-height:120px;
+  position:relative; width:100%; height:200px; min-height:200px; flex:0 0 auto;
 }
-.sust-pie-wrap canvas{ width:100%; height:100%; display:block; }
+.sust-pie-wrap canvas{ width:100%; height:100%; display:block; image-rendering:auto; }
 #view-sustain .tlm-legend{
   display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px;
   font-size:12px; line-height:1.4;
@@ -1512,56 +1754,62 @@ canvas.spark{ width:100%; height:28px; display:block; }
 
     <!-- ===== OVERVIEW ===== -->
     <section class="view" id="view-overview">
-      <div class="grid g-7" style="margin-bottom:16px;">
-        <div class="stat info"><div class="lbl">Total Servers</div><div class="val" id="s-total">4</div></div>
-        <div class="stat ok"><div class="lbl">Online</div><div class="val" id="s-online">0</div></div>
-        <div class="stat" id="s-alarms-card"><div class="lbl">Alarms</div><div class="val" id="s-alarms">0</div></div>
-        <div class="stat info"><div class="lbl">Avg CPU</div><div class="val" id="s-avgcpu">0<span class="unit">%</span></div></div>
-        <div class="stat info"><div class="lbl">Avg RAM</div><div class="val" id="s-avgram">0<span class="unit">%</span></div></div>
-        <div class="stat" id="s-temp-card"><div class="lbl">Max Temp</div><div class="val" id="s-maxtemp">0<span class="unit">°C</span></div></div>
-        <div class="stat info"><div class="lbl">Total Network</div><div class="val" id="s-net">0<span class="unit">Mbps</span></div></div>
+      <div class="ov-hero">
+        <div class="ov-kpis">
+          <div class="ov-kpi"><div class="lbl">Total Servers</div><div class="val" id="s-total">4</div></div>
+          <div class="ov-kpi ok"><div class="lbl">Online</div><div class="val" id="s-online">0</div></div>
+          <div class="ov-kpi ok" id="s-alarms-card"><div class="lbl">Alarms</div><div class="val" id="s-alarms">0</div></div>
+          <div class="ov-kpi"><div class="lbl">Avg CPU</div><div class="val" id="s-avgcpu">0<span class="unit">%</span></div></div>
+          <div class="ov-kpi"><div class="lbl">Avg RAM</div><div class="val" id="s-avgram">0<span class="unit">%</span></div></div>
+          <div class="ov-kpi" id="s-temp-card"><div class="lbl">Max Temp</div><div class="val" id="s-maxtemp">0<span class="unit">°C</span></div></div>
+          <div class="ov-kpi"><div class="lbl">Total Network</div><div class="val" id="s-net">0<span class="unit">Mbps</span></div></div>
+        </div>
+        <div class="ov-perf">
+          <h3>Overall Performance (All Servers)</h3>
+          <div class="metric-bar-row">
+            <span class="name">CPU</span>
+            <div class="bar-track"><div class="bar-fill" id="bar-cpu" style="width:0%"></div></div>
+            <span class="num" id="bar-cpu-n">0%</span>
+          </div>
+          <div class="metric-bar-row">
+            <span class="name">RAM</span>
+            <div class="bar-track"><div class="bar-fill" id="bar-ram" style="width:0%"></div></div>
+            <span class="num" id="bar-ram-n">0%</span>
+          </div>
+          <div class="metric-bar-row">
+            <span class="name">Disk</span>
+            <div class="bar-track"><div class="bar-fill" id="bar-disk" style="width:0%"></div></div>
+            <span class="num" id="bar-disk-n">0%</span>
+          </div>
+          <div class="metric-bar-row" title="Share of 1,200 Mbps provisioned">
+            <span class="name">Network</span>
+            <div class="bar-track"><div class="bar-fill" id="bar-net" style="width:0%"></div></div>
+            <span class="num" id="bar-net-n">0%</span>
+          </div>
+        </div>
       </div>
-
-      <div class="panel">
-        <h3><span class="ic">▤</span> Overall Performance (All Servers) <span class="hint">live average</span></h3>
-        <div class="metric-bar-row">
-          <div class="top"><span class="name">CPU</span><span class="num" id="bar-cpu-n">0%</span></div>
-          <div class="bar-track"><div class="bar-fill" id="bar-cpu" style="width:0%; background:var(--accent);"></div></div>
-        </div>
-        <div class="metric-bar-row">
-          <div class="top"><span class="name">RAM</span><span class="num" id="bar-ram-n">0%</span></div>
-          <div class="bar-track"><div class="bar-fill" id="bar-ram" style="width:0%; background:#b78bff;"></div></div>
-        </div>
-        <div class="metric-bar-row">
-          <div class="top"><span class="name">Disk</span><span class="num" id="bar-disk-n">0%</span></div>
-          <div class="bar-track"><div class="bar-fill" id="bar-disk" style="width:0%; background:var(--warn);"></div></div>
-        </div>
-        <div class="metric-bar-row">
-          <div class="top"><span class="name">Network <span style="font-weight:400; color:var(--text-faint);">(of 1,200 Mbps provisioned)</span></span><span class="num" id="bar-net-n">0%</span></div>
-          <div class="bar-track"><div class="bar-fill" id="bar-net" style="width:0%; background:var(--ok);"></div></div>
-        </div>
+      <div class="ov-links" aria-hidden="true">
+        <span class="hub"></span>
+        <svg viewBox="0 0 1000 80" preserveAspectRatio="none">
+          <path d="M500 4 C500 42 125 30 125 78" />
+          <path d="M500 4 C500 42 375 30 375 78" />
+          <path d="M500 4 C500 42 625 30 625 78" />
+          <path d="M500 4 C500 42 875 30 875 78" />
+        </svg>
       </div>
-
-      <div class="panel">
-        <h3><span class="ic">⚡</span> Quick Actions</h3>
-        <div class="actions-grid">
+      <div id="overview-servers"></div>
+      <div class="ov-dock">
+        <div class="ov-status"><span class="ov-ic">▣</span><div><b>CPU Status</b><div class="state ok" id="hc-cpu-state">Normal</div><p id="hc-cpu-text">All servers operating within normal range.</p></div></div>
+        <div class="ov-status"><span class="ov-ic">▦</span><div><b>Memory Status</b><div class="state ok" id="hc-ram-state">Normal</div><p id="hc-ram-text">All servers operating within normal range.</p></div></div>
+        <div class="ov-status"><span class="ov-ic">▤</span><div><b>Disk Status</b><div class="state ok" id="hc-disk-state">Normal</div><p id="hc-disk-text">All servers operating within normal range.</p></div></div>
+        <div class="ov-actions">
           <button class="action-btn a1" id="qa-refresh"><span class="ic">↻</span> Refresh All Data</button>
           <button class="action-btn a2" id="qa-health"><span class="ic">✓</span> Health Check</button>
           <button class="action-btn a3" id="qa-alarms"><span class="ic">▲</span> Alarm Summary</button>
-          <button class="action-btn a4" id="qa-report"><span class="ic">⬇</span> Export Report</button>
+          <button class="action-btn a4" id="qa-report"><span class="ic">↓</span> Export Report</button>
+          <button class="action-btn a5" id="ov-assistant" type="button"><span class="ic">✦</span> Server AI Assistant</button>
         </div>
       </div>
-
-      <div class="panel">
-        <h3><span class="ic">◈</span> System Health Status</h3>
-        <div class="grid g-3">
-          <div class="status-card"><div class="ic">▣</div><div><b>CPU Status</b><div class="state ok" id="hc-cpu-state">Normal</div><p id="hc-cpu-text">All servers operating within normal range.</p></div></div>
-          <div class="status-card"><div class="ic">◐</div><div><b>Memory Status</b><div class="state ok" id="hc-ram-state">Normal</div><p id="hc-ram-text">All servers operating within normal range.</p></div></div>
-          <div class="status-card"><div class="ic">▥</div><div><b>Disk Status</b><div class="state ok" id="hc-disk-state">Normal</div><p id="hc-disk-text">All servers operating within normal range.</p></div></div>
-        </div>
-      </div>
-
-      <div class="grid g-2" id="overview-servers" style="grid-template-columns:repeat(2,1fr); margin-top:16px;"></div>
     </section>
 
     <!-- ===== SERVER DETAIL (template reused for 1-4) ===== -->
@@ -2141,7 +2389,7 @@ canvas.spark{ width:100%; height:28px; display:block; }
         <div class="panel">
           <h3><span class="ic">◉</span> Camera <span class="hint">from the VisionHMI app on port 8002</span></h3>
           <img id="visionFrame" class="vision-frame" alt="Face and gesture camera" hidden />
-          <p class="vision-offline" id="visionOffline">Vision app is not running. Start it with <b>.venv\Scripts\python app.py</b> inside SCADAPROJECT.</p>
+          <p class="vision-offline" id="visionOffline">Vision app is not running. Start it with <b>.venv\Scripts\python vision_web.py</b> inside SCADAPROJECT.</p>
         </div>
         <div class="panel">
           <h3><span class="ic">◉</span> Recognition</h3>
@@ -2149,7 +2397,7 @@ canvas.spark{ width:100%; height:28px; display:block; }
           <div class="vision-stat"><div class="lbl">Operator</div><div class="val" id="visionUser">—</div></div>
           <div class="vision-stat"><div class="lbl">Gesture</div><div class="val" id="visionGesture">—</div></div>
           <div class="vision-stat"><div class="lbl">Simulated section</div><div class="val" id="visionSection">—</div></div>
-          <p class="note">Gestures change the simulated VisionHMI facility only. They do not start or stop the data-center servers on this dashboard.</p>
+          <p class="note">Raise your open hand to scroll this page up. Lower it to scroll down. Gestures do not start or stop the data-center servers.</p>
         </div>
       </div>
     </section>
@@ -2319,7 +2567,6 @@ function showView(view, serverNum){
   clearInterval(wbHistTimer);
   clearInterval(sustTimer);
   clearInterval(oeeTimer);
-  clearInterval(visionTimer);
   stopScopeAnimation();
   if (view === 'server'){
     buildScopeShells('srv-scopes', 'scope');
@@ -2341,10 +2588,8 @@ function showView(view, serverNum){
   if (view === 'sustain') pullSustainability(true);
   if (view === 'oee') pullOee(true);
   if (view === 'alarms') pullEvents();
-  if (view === 'vision'){
-    pullVision();
-    visionTimer = setInterval(pullVision, 1000);
-  }
+  if (view === 'overview') requestAnimationFrame(() => requestAnimationFrame(drawAllSparks));
+  if (view === 'vision') pollGestureScroll();
   if (view === 'report') loadReportSqlTable();
 }
 
@@ -2383,6 +2628,9 @@ document.getElementById('qa-health').addEventListener('click', () => showView('a
 document.getElementById('qa-alarms').addEventListener('click', () => showView('alarms'));
 document.getElementById('qa-report').addEventListener('click', () => showView('report'));
 document.getElementById('qa-refresh').addEventListener('click', doRefresh);
+document.getElementById('ov-assistant')?.addEventListener('click', () => {
+  document.getElementById('chatSidebarBtn')?.click();
+});
 document.getElementById('refreshBtn').addEventListener('click', doRefresh);
 
 document.getElementById('pauseBtn').addEventListener('click', () => {
@@ -2518,8 +2766,8 @@ function renderOverview(tags){
     if (tags[`Server${i}_Down_Alarm`]) alarms++;
   }
   document.getElementById('s-alarms').textContent = alarms;
-  document.getElementById('s-alarms-card').className = 'stat ' + (alarms > 0 ? 'crit' : 'ok');
-  document.getElementById('s-temp-card').className = 'stat ' + classify(tags.DC_Max_Temp ?? 0, THRESHOLDS.temp_warning, THRESHOLDS.temp_critical);
+  document.getElementById('s-alarms-card').className = 'ov-kpi ' + (alarms > 0 ? 'crit' : 'ok');
+  document.getElementById('s-temp-card').className = 'ov-kpi ' + classify(tags.DC_Max_Temp ?? 0, THRESHOLDS.temp_warning, THRESHOLDS.temp_critical);
 
   const cpu = tags.DC_Avg_CPU ?? 0, ram = tags.DC_Avg_RAM ?? 0, disk = tags.DC_Avg_Disk ?? 0;
   const netPct = clamp(((tags.DC_Total_Network ?? 0) / NETWORK_CAPACITY_MBPS) * 100, 0, 100);
@@ -2569,17 +2817,21 @@ function renderServerCards(tags){
     const cpuAlarm = tags[`Server${i}_CPU_Alarm`], tempAlarm = tags[`Server${i}_Temp_Alarm`], downAlarm = tags[`Server${i}_Down_Alarm`];
     const card = document.createElement('div');
     card.className = 'server-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Open Server ${i}`);
+    const shown = (value, suffix) => up ? `${fmt1(value)}${suffix}` : '—';
     card.innerHTML = `
       <div class="head">
-        <span class="sdot" style="background:${up?'var(--ok)':'var(--crit)'}"></span>
+        <span class="ov-srv-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="3.5" width="18" height="6.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="18" height="6.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="6.7" r="1" fill="currentColor"/><circle cx="7" cy="17.2" r="1" fill="currentColor"/></svg></span>
         <h4>Server ${i}</h4>
         <span class="stpill ${up?'up':'down'}">${up?'● UP':'● DOWN'}</span>
       </div>
       <div class="mini-grid">
-        <div class="mini"><div class="l">CPU</div><div class="v">${fmt1(cpu)}%</div></div>
-        <div class="mini"><div class="l">RAM</div><div class="v">${fmt1(ram)}%</div></div>
-        <div class="mini"><div class="l">Disk</div><div class="v">${fmt1(disk)}%</div></div>
-        <div class="mini"><div class="l">Temp</div><div class="v">${fmt1(temp)}°C</div></div>
+        <div class="mini"><div class="l">CPU</div><div class="v">${shown(cpu,'%')}</div></div>
+        <div class="mini"><div class="l">RAM</div><div class="v">${shown(ram,'%')}</div></div>
+        <div class="mini"><div class="l">Disk</div><div class="v">${shown(disk,'%')}</div></div>
+        <div class="mini"><div class="l">Temp</div><div class="v">${shown(temp,'°C')}</div></div>
       </div>
       <div class="spark-wrap"><div class="lbl"><span>CPU trend</span><span>last ${SPARK_LEN}s</span></div><canvas class="spark" data-server="${i}"></canvas></div>
       <div class="chips">
@@ -2595,7 +2847,23 @@ function renderServerCards(tags){
       </div>`;
     wrap.appendChild(card);
   }
-  $$('.rowbtns [data-ctl]', wrap).forEach(b => b.addEventListener('click', () => {
+  $$('.server-card', wrap).forEach(card => {
+    const openServer = () => {
+      const server = parseInt(card.querySelector('[data-open]')?.dataset.open || '0', 10);
+      if (server) showView('server', server);
+    };
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('button')) return;
+      openServer();
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openServer();
+    });
+  });
+  $$('.rowbtns [data-ctl]', wrap).forEach(b => b.addEventListener('click', (event) => {
+    event.stopPropagation();
     const action = b.dataset.ctl;
     const server = parseInt(b.dataset.server, 10);
     const path = action === 'toggle' ? `/api/toggle?server=${server}`
@@ -2603,7 +2871,10 @@ function renderServerCards(tags){
       : `/api/reset?server=${server}`;
     callControl(path, `${action} Server ${server}`);
   }));
-  $$('.rowbtns [data-open]', wrap).forEach(b => b.addEventListener('click', () => showView('server', parseInt(b.dataset.open))));
+  $$('.rowbtns [data-open]', wrap).forEach(b => b.addEventListener('click', (event) => {
+    event.stopPropagation();
+    showView('server', parseInt(b.dataset.open));
+  }));
   drawAllSparks();
 }
 
@@ -3435,7 +3706,7 @@ function drawSpark(canvas, values){
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 100;
-  const cssH = 28;
+  const cssH = canvas.clientHeight || 28;
   canvas.width = cssW * dpr; canvas.height = cssH * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
@@ -3445,8 +3716,8 @@ function drawSpark(canvas, values){
   const n = values.length;
   const xFor = idx => (idx/(n-1)) * cssW;
   const yFor = v => cssH - ((v - lo) / Math.max(1, hi - lo)) * cssH;
-  const color = getCss('var(--accent)');
-  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin='round'; ctx.lineCap='round';
+  const color = canvas.closest('#view-overview') ? '#3de0ff' : getCss('var(--accent)');
+  ctx.strokeStyle = color; ctx.lineWidth = canvas.closest('#view-overview') ? 2 : 1.6; ctx.lineJoin='round'; ctx.lineCap='round';
   ctx.beginPath();
   values.forEach((v,idx) => { const x=xFor(idx), y=yFor(v); idx===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
   ctx.stroke();
@@ -3971,18 +4242,35 @@ function sustThemeInk(){
 
 function sustFitCanvas(canvas, minH){
   const wrap = canvas.parentElement;
-  const dpr = window.devicePixelRatio || 1;
-  // Prefer live frame size so charts fill their card
-  const cssW = Math.max(120, wrap?.clientWidth || canvas.clientWidth || 160);
-  const measuredH = wrap?.clientHeight || 0;
-  const cssH = Math.max(minH || 100, measuredH > 20 ? measuredH : (minH || 120));
-  canvas.width = Math.floor(cssW * dpr);
-  canvas.height = Math.floor(cssH * dpr);
-  canvas.style.width = cssW + 'px';
-  canvas.style.height = cssH + 'px';
+  const rect = wrap ? wrap.getBoundingClientRect() : canvas.getBoundingClientRect();
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
+  const cssW = Math.max(160, Math.round(rect.width || wrap?.clientWidth || 160));
+  const cssH = Math.max(minH || 160, Math.round(rect.height || wrap?.clientHeight || minH || 160));
+  const bitmapW = Math.floor(cssW * dpr);
+  const bitmapH = Math.floor(cssH * dpr);
+  if (canvas.width !== bitmapW) canvas.width = bitmapW;
+  if (canvas.height !== bitmapH) canvas.height = bitmapH;
+  canvas.style.setProperty('width', cssW + 'px', 'important');
+  canvas.style.setProperty('height', cssH + 'px', 'important');
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   return { ctx, cssW, cssH };
+}
+
+function sustTrace(ctx, xs, ys){
+  if (!xs.length) return;
+  ctx.moveTo(xs[0], ys[0]);
+  for (let i = 1; i < xs.length - 1; i++){
+    const xc = (xs[i] + xs[i + 1]) / 2;
+    const yc = (ys[i] + ys[i + 1]) / 2;
+    ctx.quadraticCurveTo(xs[i], ys[i], xc, yc);
+  }
+  const last = xs.length - 1;
+  ctx.lineTo(xs[last], ys[last]);
 }
 
 function sustRoundRect(ctx, x, y, w, h, r){
@@ -4042,7 +4330,7 @@ function drawSustGauge(canvasId, value, min, max, band, unit){
   ctx.lineWidth = lw;
   ctx.lineCap = 'round';
   ctx.shadowColor = color;
-  ctx.shadowBlur = ink.isLight ? 8 : 22;
+  ctx.shadowBlur = ink.isLight ? 4 : 8;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
@@ -4154,9 +4442,9 @@ function drawSustAreaLine(canvasId, series){
   const cfeMin = Math.min(...cfe) - 3, cfeMax = Math.max(...cfe) + 3;
   const gMin = Math.min(...grid) - 0.08, gMax = Math.max(...grid) + 0.08;
 
-  const xAt = i => padL + (i / (pts.length - 1)) * w;
-  const yCfe = v => padT + h - ((v - cfeMin) / (cfeMax - cfeMin || 1)) * h;
-  const yGrid = v => padT + h - ((v - gMin) / (gMax - gMin || 1)) * h;
+  const xs = pts.map((_, i) => padL + (i / (pts.length - 1)) * w);
+  const yCfePts = cfe.map(v => padT + h - ((v - cfeMin) / (cfeMax - cfeMin || 1)) * h);
+  const yGridPts = grid.map(v => padT + h - ((v - gMin) / (gMax - gMin || 1)) * h);
 
   // horizontal guide
   ctx.strokeStyle = sustThemeInk().guide;
@@ -4168,12 +4456,9 @@ function drawSustAreaLine(canvasId, series){
 
   // CFE fill
   ctx.beginPath();
-  pts.forEach((_, i) => {
-    const x = xAt(i), y = yCfe(cfe[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(xAt(pts.length - 1), padT + h);
-  ctx.lineTo(padL, padT + h);
+  sustTrace(ctx, xs, yCfePts);
+  ctx.lineTo(xs[xs.length - 1], padT + h);
+  ctx.lineTo(xs[0], padT + h);
   ctx.closePath();
   const fill = ctx.createLinearGradient(0, padT, 0, padT + h);
   fill.addColorStop(0, 'rgba(84,230,168,.45)');
@@ -4182,22 +4467,16 @@ function drawSustAreaLine(canvasId, series){
   ctx.fill();
 
   ctx.beginPath();
-  pts.forEach((_, i) => {
-    const x = xAt(i), y = yCfe(cfe[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
+  sustTrace(ctx, xs, yCfePts);
   ctx.strokeStyle = '#54e6a8';
   ctx.lineWidth = 2.5;
   ctx.shadowColor = '#54e6a8';
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 6;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
   ctx.beginPath();
-  pts.forEach((_, i) => {
-    const x = xAt(i), y = yGrid(grid[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
+  sustTrace(ctx, xs, yGridPts);
   ctx.strokeStyle = sustThemeInk().text;
   ctx.lineWidth = 1.8;
   ctx.setLineDash([4, 3]);
@@ -4317,7 +4596,7 @@ function drawSustDonut(canvasId, slices, legendId, opts){
     ctx.closePath();
     ctx.fillStyle = color;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 4;
     ctx.fill();
     ctx.shadowBlur = 0;
     angle += slice;
@@ -5075,50 +5354,74 @@ document.getElementById('rp-sql-refresh')?.addEventListener('click', loadReportS
 document.getElementById('rp-sql-server')?.addEventListener('change', loadReportSqlTable);
 
 const VISION_ORIGIN = "http://127.0.0.1:8002";
-let lastGestureMs = null;
+let lastScrollMs = null;
+let scrollReady = false;
 
-async function pullVision(){
+function paintVision(data){
   const frame = document.getElementById("visionFrame");
   const offline = document.getElementById("visionOffline");
   const lockEl = document.getElementById("visionLock");
   const userEl = document.getElementById("visionUser");
   const gestureEl = document.getElementById("visionGesture");
   const sectionEl = document.getElementById("visionSection");
+  offline.hidden = true;
+  if (data.has_frame){
+    frame.hidden = false;
+    frame.src = VISION_ORIGIN + "/frame.jpg?t=" + Date.now();
+  } else {
+    frame.hidden = true;
+  }
+  lockEl.textContent = data.locked ? "Locked" : "Recognized";
+  const user = data.user;
+  userEl.textContent = user ? `${user.name} · ${user.role || "operator"}` : (data.reason || "No face");
+  const gesture = data.gesture || "no hand";
+  const scroll = data.scroll === "scroll_up" || data.scroll === "scroll_down" ? String(data.scroll).replaceAll("_", " ") : "";
+  gestureEl.textContent = scroll ? `${gesture} → ${scroll}` : gesture;
+  const bits = [data.section, data.armed ? "interaction active" : ""];
+  if (data.alarm_count != null) bits.push(`${data.alarm_count} simulated alarms`);
+  sectionEl.textContent = bits.filter(Boolean).join(" · ") || "Hand scroll is active on this page";
+}
+
+function applyHandScroll(data){
+  const stamp = data.scroll_ms;
+  if (!scrollReady) {
+    lastScrollMs = stamp;
+    scrollReady = true;
+    return;
+  }
+  if ((data.scroll !== "scroll_up" && data.scroll !== "scroll_down") || stamp == null || stamp === lastScrollMs) return;
+  lastScrollMs = stamp;
+  const delta = data.scroll === "scroll_down" ? 360 : -360;
+  const main = document.querySelector(".main");
+  const scroller = main && main.scrollHeight > main.clientHeight + 24
+    ? main
+    : (document.scrollingElement || document.documentElement);
+  scroller.scrollBy({ top: delta, behavior: "smooth" });
+}
+
+async function pollGestureScroll(){
+  const onVision = document.getElementById("view-vision")?.classList.contains("active");
   try{
     const data = await fetch(VISION_ORIGIN + "/status", { cache: "no-store" }).then(r => {
       if (!r.ok) throw new Error("status " + r.status);
       return r.json();
     });
-    offline.hidden = true;
-    if (data.has_frame){
-      frame.hidden = false;
-      frame.src = VISION_ORIGIN + "/frame.jpg?t=" + Date.now();
-    } else {
-      frame.hidden = true;
-    }
-    lockEl.textContent = data.locked ? "Locked" : "Recognized";
-    const user = data.user;
-    userEl.textContent = user ? `${user.name} · ${user.role || "operator"}` : (data.reason || "No face");
-    const gesture = data.gesture || "no hand";
-    gestureEl.textContent = data.event && data.event !== gesture ? `${gesture} → ${String(data.event).replaceAll("_", " ")}` : gesture;
-    if ((data.event === "scroll_up" || data.event === "scroll_down") && data.event_ms != null && data.event_ms !== lastGestureMs) {
-      lastGestureMs = data.event_ms;
-      const scroller = document.scrollingElement || document.documentElement;
-      scroller.scrollBy({ top: data.event === "scroll_down" ? 320 : -320, behavior: "smooth" });
-    }
-    const bits = [data.section, data.armed ? "interaction active" : "palm required to arm"];
-    if (data.alarm_count != null) bits.push(`${data.alarm_count} simulated alarms`);
-    sectionEl.textContent = bits.filter(Boolean).join(" · ");
+    if (onVision) paintVision(data);
+    applyHandScroll(data);
   }catch(e){
+    if (!onVision) return;
+    const frame = document.getElementById("visionFrame");
+    const offline = document.getElementById("visionOffline");
     frame.hidden = true;
     offline.hidden = false;
-    offline.textContent = "Vision app is not running. Start it with .venv\\Scripts\\python app.py inside SCADAPROJECT.";
-    lockEl.textContent = "Offline";
-    userEl.textContent = "—";
-    gestureEl.textContent = "—";
-    sectionEl.textContent = "—";
+    offline.textContent = "Vision app is not running. Start it with .venv\\Scripts\\python vision_web.py inside SCADAPROJECT.";
+    document.getElementById("visionLock").textContent = "Offline";
+    document.getElementById("visionUser").textContent = "—";
+    document.getElementById("visionGesture").textContent = "—";
+    document.getElementById("visionSection").textContent = "—";
   }
 }
+visionTimer = setInterval(pollGestureScroll, 300);
 
 (function initChatSidebar(){
   const drawer = document.getElementById("chatSidebar");

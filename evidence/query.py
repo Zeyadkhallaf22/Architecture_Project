@@ -1,15 +1,12 @@
-"""IF-04 operational evidence and IF-05 IDS evidence.
-
-IDS is not running in this prototype. The IDS query says so and returns no detections.
-"""
+"""IF-04 reads events the broker has delivered."""
 
 from __future__ import annotations
 
-from evidence.hub import HUB
+from evidence.envelope import get_hub
 
 
 def operational_evidence(asset_id: str = "", event_type: str = "") -> dict[str, object]:
-    rows = HUB.records()
+    rows = get_hub().records()
     if asset_id:
         rows = [row for row in rows if str(row.get("assetId") or "") == asset_id]
     if event_type:

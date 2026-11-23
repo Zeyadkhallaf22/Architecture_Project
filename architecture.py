@@ -16,6 +16,7 @@ COMPONENTS: list[tuple[str, str, str]] = [
     ("Evidence", "package", "evidence"),
     ("Event hub", "module", "evidence/hub.py"),
     ("Replay label", "module", "evidence/schema.py"),
+    ("Detection modules", "package", "intelligence"),
     ("Correlation and evidence backend", "service", "server2.py"),
     ("Explanation and assistant", "service", "chatbot_server.py"),
     ("Dashboard frontend", "package", "frontend"),
@@ -26,7 +27,8 @@ COMPONENTS: list[tuple[str, str, str]] = [
 FORBIDDEN_IMPORTS: dict[str, set[str]] = {
     "evidence": {"access", "ingestion"},
     "access": {"evidence", "ingestion"},
-    "ingestion": {"access"},
+    "ingestion": {"access", "intelligence"},
+    "intelligence": {"access"},
 }
 
 READ_ONLY_SERVICES = (

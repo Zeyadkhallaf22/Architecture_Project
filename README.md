@@ -1,6 +1,6 @@
 # SCADA_PROJECT
 
-AI investigation layer for a SCADA dashboard. This prototype runs on one PC. It does not include an IDS.
+AI investigation layer for a SCADA dashboard. This prototype runs on one PC. Detection modules are read-only. The eight Milestone 2 ADRs are accepted in `docs/ADRS.md`.
 
 # Schneider Electric · AVEVA — Data Center Monitoring Dashboard
 
@@ -54,14 +54,14 @@ pip install reportlab flask flask-cors
 python prepare_and_load_it_dataset.py
 ```
 
-3. Start everything on this PC with one command. Set `GEMINI_API_KEY` in the same PowerShell window first if the chatbot should use Gemini. The key stays in that window. It is not stored in the project.
+3. Start everything on this PC with one command. RabbitMQ must be running on `127.0.0.1:5672` so readings go through the broker. Set `GEMINI_API_KEY` in the same PowerShell window first if the chatbot should use Gemini. The key stays in that window. It is not stored in the project.
 
 ```powershell
 cd D:\AVEVA\backend2\backend2
 .\start.ps1
 ```
 
-4. Open **http://127.0.0.1:8000/** and sign in. The demo account is `mariamsalem` / `mariam1234`. The Admin role is read from `Grad_role.csv`.
+4. Open **http://127.0.0.1:8000/** and sign in. The demo account is `mariamsalem` / `mariam1234`. The Admin role is read from `Grad_role.csv`. If the camera on port 8002 is down, the face line stays Access denied and the fallback code is `face-fallback`.
 
 The chatbot keeps answering from dashboard facts when Gemini is not configured. The dashboard and the replayed dataset keep running in that case.
 
@@ -72,19 +72,21 @@ The chatbot keeps answering from dashboard facts when Gemini is not configured. 
 | 5.1 Performance | Replayed dataset rows become events with an id and a source time. A repeated id is ignored. |
 | 5.2 Reliability | Each replayed row is marked `replayed`, not as a live plant signal. |
 | 5.3 Security | Chatbot, analytics, and gestures cannot call toggle, stress, or reset. |
-| 5.4 Usability | Gestures stay in the local camera app and do not command the servers. |
-| 5.5 Traceability | Chatbot answers are built from dashboard records. Gemini only rewrites those facts when a key is set. |
+| 5.4 Usability | A vertical hand move scrolls the dashboard. Other gestures do not. Gestures cannot command the servers. |
+| 5.5 Traceability | Chatbot answers and report claims cite the records they use. A detection is stored only when Module A, B, or C produces one. |
 | 5.6 Modifiability | A new replay source is a new module in the `ingestion` package. The dashboard pages stay unchanged. |
 
-The running interfaces follow Milestone 2. `POST /api/login` and `POST /api/v1/auth/session` sign the user in. Replayed rows enter through the IF-02 envelope. `GET /api/v1/evidence` reads those records. `GET /api/v1/ids/evidence` returns unavailable and an empty list. `POST /api/v1/queries` on port 8001 answers from dashboard facts. A vertical hand move sends `scroll_up` or `scroll_down` and the dashboard scrolls. Toggle, stress, and reset stay on the separate control path and each attempt is audited.
+The running interfaces follow the accepted Milestone 2 ADRs. `POST /api/login` and `POST /api/v1/auth/session` sign the user in. `POST /api/v1/auth/mfa` is the camera-down fallback. Replayed rows enter through the IF-02 envelope. `GET /api/v1/evidence` reads those records. `GET /api/v1/ids/evidence` returns only recorded detections. `POST /api/v1/queries` on port 8001 answers from dashboard facts. A vertical hand move sends `scroll_up` or `scroll_down` and the dashboard scrolls. Toggle, stress, and reset stay on the separate control path and each attempt is audited.
+
+The three use cases are sign-in, live KPIs, and the read-only chatbot. The ADR table and the measured intake check are in `docs/ADRS.md`.
 
 ```powershell
-python -m unittest tests.test_architecture_boundaries tests.test_architecture_conformance
+python -m unittest tests.test_architecture_boundaries tests.test_architecture_conformance tests.test_cross_boundary tests.test_quality_measures
 ```
 
 ## Architecture conformance
 
-Each component is a package (a folder), a module (one file in a package), or a service (its own process and port). IDS is not part of this prototype. Analysis stays inside the backend service on this one PC.
+Each component is a package (a folder), a module (one file in a package), or a service (its own process and port). Detection stays read-only. Analysis stays inside the backend service on this one PC.
 
 | Component | Kind | Where |
 |---|---|---|
@@ -96,12 +98,13 @@ Each component is a package (a folder), a module (one file in a package), or a s
 | Evidence | package | `evidence/` |
 | Event hub | module | `evidence/hub.py` |
 | Replay label | module | `evidence/schema.py` |
+| Detection modules | package | `intelligence/` |
 | Correlation and evidence backend | service | `server2.py` on port 8000 |
 | Explanation and assistant | service | `chatbot_server.py` on port 8001 |
 | Dashboard frontend | package | `frontend/` |
 | Gesture client | service | `SCADAPROJECT/vision_web.py` on port 8002 |
 
-`ingestion` may publish events. It cannot import `access`. `access` and `evidence` cannot import each other. The assistant service and the gesture service have no control route. `tests/test_architecture_conformance.py` checks those rules and fails if either service names `/api/toggle`, `/api/stress`, or `/api/reset`.
+`ingestion` may publish events. It cannot import `access` or `intelligence`. Detection cannot import `access`. The assistant service and the gesture service have no control route. `tests/test_architecture_conformance.py` checks those rules and fails if either service names `/api/toggle`, `/api/stress`, or `/api/reset`.
 
 ## Project layout
 

@@ -291,12 +291,13 @@ SYNONYMS = {
     "green": {"sustainability", "carbon", "pue", "wue", "water"},
     "efficiency": {"oee", "effectiveness", "dcie"},
     "oee": set(),
-    "alarm": {"alarm", "event", "active"},
-    "alarms": {"alarm", "event", "active"},
+    "alarm": {"alarm"},
+    "alarms": {"alarm"},
     "offline": {"offline", "down"},
     "down": {"offline", "down"},
-    "recommend": {"recommendation", "action"},
-    "recommendation": {"action", "risk", "critical"},
+    "recommend": {"recommendation", "recommendations", "action"},
+    "recommendation": {"recommendations", "action"},
+    "recommendations": {"recommendation", "action"},
     "fix": {"action", "recommendation"},
     "should": {"recommendation", "action"},
     "memory": {"ram"},
@@ -587,6 +588,12 @@ def build_facts(snapshot: dict) -> list[dict]:
         )
         for number in range(1, 5):
             add("server", server_line(tags, number))
+            add("metric", f"Server {number} CPU is {as_float(tags.get(f'Server{number}_CPU_Percent')):.1f}%.")
+            add("metric", f"Server {number} RAM memory is {as_float(tags.get(f'Server{number}_RAM_Percent')):.1f}%.")
+            add("metric", f"Server {number} disk storage is {as_float(tags.get(f'Server{number}_Disk_Percent')):.1f}%.")
+            add("metric", f"Server {number} temperature is {as_float(tags.get(f'Server{number}_Temp_C')):.1f}°C.")
+            add("metric", f"Server {number} network is {as_float(tags.get(f'Server{number}_Network_Mbps')):.1f} Mbps.")
+            add("metric", f"Server {number} latency is {as_float(tags.get(f'Server{number}_Latency_ms')):.1f} ms.")
         for metric, label in (
             ("CPU_Percent", "CPU"),
             ("RAM_Percent", "RAM memory"),
@@ -612,17 +619,30 @@ def build_facts(snapshot: dict) -> list[dict]:
             f"{system.get('high_recommendations', 0)} high recommendations. "
             f"{system.get('servers_online')}/{system.get('total_servers')} servers online.",
         )
+    for kpi in analytics.get("server_kpis") or []:
+        if not isinstance(kpi, dict):
+            continue
+        add(
+            "analytics",
+            f"AI analytics Server {kpi.get('server')}: health {kpi.get('health_score')} "
+            f"({kpi.get('health_label')}), headroom {kpi.get('capacity_headroom')}%, "
+            f"risk {kpi.get('risk_score')}/100, CPU {kpi.get('cpu')}%, RAM {kpi.get('ram')}%, "
+            f"disk {kpi.get('disk')}%, temperature {kpi.get('temperature')}°C, "
+            f"network {kpi.get('network')} Mbps, latency {kpi.get('latency')} ms, "
+            f"status {'online' if kpi.get('status') else 'offline'}.",
+        )
     for item in analytics.get("recommendations") or []:
         steps = item.get("how_to_overcome") or []
         step_text = " ".join(str(step) for step in steps[:3])
         priority = str(item.get("priority") or "info")
-        severe = "severe critical" if priority == "critical" else priority
+        evidence = str(item.get("evidence") or "").strip().rstrip(".")
+        action = str(item.get("recommended_action") or "").strip().rstrip(".")
+        problem = str(item.get("problem") or "").strip().rstrip(".")
         add(
-            "risk",
-            f"{severe} risk on Server {item.get('server')}, category {item.get('category')}. "
-            f"Problem: {item.get('problem')}. Evidence: {item.get('evidence')}. "
-            f"Impact: {item.get('impact')}. Recommended action: {item.get('recommended_action')}. "
-            f"How to overcome: {step_text}.",
+            "recommendation",
+            f"AI recommendation {priority} for Server {item.get('server')}: {problem}. "
+            f"Evidence: {evidence}. Action: {action}. "
+            f"How to overcome: {step_text}. Confidence {item.get('confidence')}%.",
         )
     for challenge in analytics.get("challenges") or []:
         if challenge.get("active"):
@@ -713,13 +733,12 @@ def build_facts(snapshot: dict) -> list[dict]:
             f"Alarm history has {alarms.get('total_events', 0)} events and {alarms.get('active_count', 0)} active.",
         )
     for event in alarms.get("events") or []:
-        live = event.get("live") or {}
+        status = str(event.get("status") or "").strip().upper()
+        kind = "Active alarm" if status == "ACTIVE" else "Cleared alarm"
         add(
             "alarms",
-            f"Alarm event Server {event.get('server')} at {event.get('timestamp')}: {event.get('event')}. "
-            f"Severity {event.get('severity')}, status {event.get('status')}. "
-            f"Live CPU {live.get('cpu')}%, RAM {live.get('ram')}%, temperature {live.get('temperature')}°C, "
-            f"status {_up_down(live.get('status'))}."
+            f"{kind} on Server {event.get('server')} at {event.get('timestamp')}: {event.get('event')}. "
+            f"Severity {event.get('severity')}.",
         )
 
     for item in predictions.get("predictions") or predictions.get("servers") or []:
@@ -826,61 +845,150 @@ def summarize_previous(previous: str) -> str:
     return "Summary of the last answer:\n" + body
 
 
+def _bullets(lines: list[str], limit: int = 8) -> str:
+    unique: list[str] = []
+    for line in lines:
+        if line and line not in unique:
+            unique.append(line)
+        if len(unique) == limit:
+            break
+    if not unique:
+        return ""
+    if len(unique) == 1:
+        return unique[0]
+    return "\n".join(f"• {line}" for line in unique)
+
+
+def _section(facts: list[dict], section: str, server: int | None = None) -> list[str]:
+    lines = []
+    for fact in facts:
+        if fact["section"] != section:
+            continue
+        if server is not None and f"Server {server}" not in fact["text"]:
+            continue
+        lines.append(fact["text"])
+    return lines
+
+
 def answer_from_facts(message: str, facts: list[dict]) -> str:
     raw, expanded = expand_query(message)
     if raw & {"help", "commands"} or "what can you" in message.lower():
         return (
-            "I read the whole live dashboard: each server's CPU, RAM, disk, temperature, network, and latency; "
-            "severe and critical risks; alarm history; executive KPIs; sustainability (PUE, power, water, carbon); "
-            "and OEE. Ask in your own words. I cannot start or stop equipment."
+            "I read the live dashboard and answer only the part you ask about: "
+            "one server, one metric, active alarms, severe risks, recommendations, PUE, or OEE. "
+            "I cannot start or stop equipment."
         )
 
     server = mentioned_server(message.lower())
-    chosen = facts
-    if server is not None:
-        chosen = [fact for fact in facts if server in servers_in(fact["text"]) or not servers_in(fact["text"])]
+    metric_words = raw & {"cpu", "ram", "memory", "disk", "storage", "temp", "temperature", "latency", "network"}
 
-    if raw & {"online", "offline", "up"} and not (raw & {"cpu", "ram", "memory", "disk", "risk", "risks", "alarm", "alarms", "temp", "temperature"}):
+    if raw & {"online", "offline", "up"} and not (metric_words or raw & {"risk", "risks", "alarm", "alarms"}):
         fleet = next((fact["text"] for fact in facts if fact["text"].startswith("Fleet status")), None)
         if fleet:
             return fleet
 
-    if raw & {"alarm", "alarms"} and "history" not in raw:
-        live_lines = [
-            fact["text"]
-            for fact in chosen
-            if fact["section"] == "server" and (server is None or f"Server {server} is" in fact["text"])
-        ]
-        alarm_facts = [fact["text"] for fact in chosen if fact["section"] == "alarms"]
-        active_events = [text for text in alarm_facts if "status ACTIVE" in text or text.startswith("Alarm history")]
-        lines = live_lines[:4] + active_events
+    if raw & {"alarm", "alarms"}:
+        alarm_lines = _section(facts, "alarms", server)
+        summary = next((line for line in alarm_lines if line.startswith("Alarm history")), "")
+        want_history = "history" in raw or "cleared" in raw or "all" in raw
+        if want_history:
+            body = _bullets(alarm_lines, 8)
+            return body or "The dashboard alarm list is empty."
+        active = [line for line in alarm_lines if line.startswith("Active alarm")]
+        if not active:
+            return summary or "No active alarms on the live dashboard."
+        head = summary or f"{len(active)} active alarm(s) on the live dashboard."
+        return head + "\n" + _bullets(active, 8)
+
+    recommend_ask = bool(raw & {"recommend", "recommendation", "recommendations", "advice"})
+    if recommend_ask:
+        lines = _section(facts, "recommendation", server)
         if lines:
-            return "\n".join(f"• {line}" for line in lines[:8])
+            return _bullets(lines, 12)
+        return "The AI Analytics tab has no recommendation for that question."
 
     risk_ask = bool(raw & {"severe", "risk", "risks", "critical", "danger", "dangerous", "problem", "problems", "issue", "issues"})
-    if risk_ask:
-        summary = [fact["text"] for fact in chosen if fact["text"].startswith("Severe risk summary")]
-        severe = [fact["text"] for fact in chosen if "severe critical risk on Server" in fact["text"]]
-        high = [fact["text"] for fact in chosen if fact["text"].startswith("high risk on Server")]
-        heatmap = [fact["text"] for fact in chosen if fact["text"].startswith("Risk heatmap")]
-        lines = summary[:1] + severe + high + heatmap
+    if risk_ask and not recommend_ask:
+        summary = [fact["text"] for fact in facts if fact["text"].startswith("Severe risk summary")]
+        heatmap = [fact["text"] for fact in facts if fact["text"].startswith("Risk heatmap")]
+        if server is not None:
+            heatmap = [line for line in heatmap if f"Server {server}" in line] or heatmap
+        lines = summary[:1] + heatmap[:4]
         if lines:
-            return "\n".join(f"• {line}" for line in lines[:12])
+            return _bullets(lines, 5)
 
-    broad = raw <= {"everything", "all", "overview", "dashboard", "briefing", "status", "fleet", "health", "kpi", "kpis"}
-    if broad and raw:
+    if raw & {"oee", "effectiveness", "availability", "quality"} and not metric_words:
+        lines = _section(facts, "oee")
+        if lines:
+            return _bullets(lines, 4)
+
+    if raw & {"pue", "wue", "cue", "sustainability", "carbon", "water", "power", "energy", "cooling"}:
+        lines = _section(facts, "sustainability")
+        if lines:
+            return _bullets(lines, 5)
+
+    if metric_words and (raw & {"highest", "lowest", "most", "which", "max", "maximum"} or "highest" in message.lower()):
+        label = {
+            "cpu": "CPU",
+            "ram": "RAM",
+            "memory": "RAM",
+            "disk": "disk",
+            "storage": "disk",
+            "temp": "temperature",
+            "temperature": "temperature",
+            "latency": "latency",
+            "network": "network",
+        }
+        wanted = next(label[word] for word in ("cpu", "ram", "memory", "disk", "storage", "temp", "temperature", "latency", "network") if word in raw)
+        ranking = [fact["text"] for fact in facts if fact["section"] == "ranking" and wanted.lower() in fact["text"].lower()]
+        if ranking:
+            return ranking[0]
+
+    if metric_words:
+        lines = _section(facts, "metric", server)
+        narrowed = []
+        for line in lines:
+            lowered = line.lower()
+            if "cpu" in raw and "cpu" in lowered:
+                narrowed.append(line)
+            elif raw & {"ram", "memory"} and "ram" in lowered:
+                narrowed.append(line)
+            elif raw & {"disk", "storage"} and "disk" in lowered:
+                narrowed.append(line)
+            elif raw & {"temp", "temperature"} and "temperature" in lowered:
+                narrowed.append(line)
+            elif "latency" in raw and "latency" in lowered:
+                narrowed.append(line)
+            elif "network" in raw and "network" in lowered:
+                narrowed.append(line)
+        if narrowed:
+            return _bullets(narrowed, 4)
+
+    if server is not None and not metric_words and not risk_ask:
+        status = [fact["text"] for fact in facts if fact["section"] == "server" and fact["text"].startswith(f"Server {server} is")]
+        if status:
+            return status[0]
+
+    if raw & {"health", "fleet", "kpi", "kpis"} and not metric_words:
+        fleet = [fact["text"] for fact in facts if fact["text"].startswith("Fleet status")]
+        summary = [fact["text"] for fact in facts if fact["text"].startswith("Severe risk summary")]
+        lines = fleet[:1] + summary[:1]
+        if lines:
+            return _bullets(lines, 2)
+
+    if raw & {"everything", "overview", "briefing", "dashboard"}:
         seen = set()
         lines = []
-        for fact in chosen:
-            if fact["section"] in seen:
+        for fact in facts:
+            if fact["section"] in seen or fact["section"] in {"metric", "prediction"}:
                 continue
             seen.add(fact["section"])
             lines.append(fact["text"])
         if lines:
-            return "Live dashboard briefing:\n" + "\n".join(f"• {line}" for line in lines)
+            return "Live dashboard briefing:\n" + "\n".join(f"• {line}" for line in lines[:6])
 
     ranked: list[tuple[int, str]] = []
-    for fact in chosen:
+    for fact in facts:
         fact_tokens = tokens(fact["text"])
         overlap = expanded & fact_tokens
         if not overlap:
@@ -900,11 +1008,14 @@ def answer_from_facts(message: str, facts: list[dict]) -> str:
             "Try a server number, a metric such as CPU or PUE, alarms, or severe risks."
         )
 
+    top = ranked[0][0]
     unique: list[str] = []
-    for _score, text in ranked:
+    for score, text in ranked:
+        if score < top:
+            break
         if text not in unique:
             unique.append(text)
-        if len(unique) == 6:
+        if len(unique) == 3:
             break
     if len(unique) == 1:
         return unique[0]
@@ -936,27 +1047,38 @@ def gemini_reply(message: str, facts: list[dict], previous: str, live_text: str 
             "You are a read-only operator assistant for a four-server data-center dashboard. "
             "The LIVE DASHBOARD section is the operator screen. "
             "It is reloaded from the database every 45 seconds. "
-            "Answer current alarms, status, and readings only from LIVE DASHBOARD. "
-            "An alarm with status ACTIVE is an active alarm even when tag flags are clear. "
-            "If LIVE DASHBOARD and the other notes disagree, use LIVE DASHBOARD. "
+            "Answer only the operator's question. Do not add unrelated servers, metrics, or cleared alarms. "
+            "Active alarms are the lines that say Active alarm. "
+            "If the question is about one metric, reply with that metric only. "
             "Keep every number exactly as written. "
-            "If LIVE DASHBOARD does not contain the answer, say that. "
+            "If the supplied dashboard text does not contain the answer, say that. "
+            "When the operator asks for recommendations, answer from AI ANALYTICS RECOMMENDATIONS. "
+            "Those lines are the same records as the AI Analytics tab. "
             "Do not invent readings. "
             "Refuse requests to start, stop, toggle, or change a setpoint. "
             "You cannot send control commands. "
             "Reply in a few plain sentences."
         )
+        recommendations = [fact["text"] for fact in facts if fact["section"] == "recommendation"]
+        analytics_notes = [fact["text"] for fact in facts if fact["section"] == "analytics"]
         notes = [
             fact["text"]
             for fact in facts
-            if fact["section"] not in {"server", "alarms", "fleet", "ranking"}
+            if fact["section"] not in {"server", "alarms", "fleet", "ranking", "recommendation", "analytics"}
         ]
         note_text = "\n".join(f"- {text}" for text in notes)
-        if len(note_text) > 6000:
-            note_text = note_text[:6000]
+        if len(note_text) > 4000:
+            note_text = note_text[:4000]
+        recommendation_text = "\n".join(f"- {text}" for text in recommendations)
+        analytics_text = "\n".join(f"- {text}" for text in analytics_notes)
         user = (
             f"Operator question:\n{message}\n\n"
             f"{live_text}\n\n"
+            "AI ANALYTICS RECOMMENDATIONS. Same records as the AI Analytics tab. "
+            "Use these when the operator asks for recommendations:\n"
+            f"{recommendation_text}\n\n"
+            "AI Analytics server cards:\n"
+            f"{analytics_text}\n\n"
             "Other dashboard notes. Do not use these in place of LIVE DASHBOARD readings or alarms:\n"
             f"{note_text}"
         )
@@ -1033,7 +1155,7 @@ def build_reply(message: str, previous: str = "") -> dict:
         for index, fact in enumerate(facts, start=1)
     ]
     payload["limitations"] = [
-        "IDS evidence is unavailable. No detections were created.",
+        "Security findings are listed only when a detection module recorded one.",
         "The answer uses the latest dashboard records only.",
     ]
     return payload

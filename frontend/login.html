@@ -72,6 +72,18 @@ input{
 }
 input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
 .error{ color:var(--crit); font-size:13px; min-height:1.2em; margin-top:10px; }
+.note{ color:var(--ok); font-size:13px; min-height:1.2em; margin-top:8px; }
+.choice{ display:flex; gap:16px; margin-top:16px; }
+.choice label{
+  margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text);
+  display:flex; align-items:center; gap:8px;
+}
+.choice input{ width:auto; }
+.send-code{
+  margin-top:12px; border:1px solid var(--teal); cursor:pointer;
+  background:transparent; color:var(--teal); font-weight:600;
+  border-radius:10px; padding:10px 16px; font-size:14px;
+}
 .submit{
   margin-top:16px; border:0; cursor:pointer;
   background:var(--teal); color:#04221c; font-weight:700;
@@ -116,12 +128,30 @@ input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
   <section>
     <h1>Sign in</h1>
     <div class="rule"></div>
-    <p class="lead">Enter your username and password. Sign in stays off until the camera grants access.</p>
+    <p class="lead">Enter your username and password. Sign in stays off until the camera grants access. If the camera is down, use the fallback code or an email code.</p>
     <form id="loginForm">
       <label for="loginUser">Username</label>
       <input id="loginUser" name="username" autocomplete="username" />
       <label for="loginPass">Password</label>
       <input id="loginPass" name="password" type="password" autocomplete="current-password" />
+      <div id="fallbackBox" hidden>
+        <div class="choice">
+          <label><input type="radio" name="fallbackMode" value="code" checked /> Fallback code</label>
+          <label><input type="radio" name="fallbackMode" value="email" /> Email code</label>
+        </div>
+        <div id="codeBox">
+          <label for="loginFallback">Fallback code</label>
+          <input id="loginFallback" name="code" type="password" autocomplete="off" />
+        </div>
+        <div id="emailBox" hidden>
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="email" value="mariiaamsalem003@gmail.com" />
+          <button type="button" class="send-code" id="sendEmail">Send email code</button>
+          <label for="loginEmailCode">Email code</label>
+          <input id="loginEmailCode" name="emailCode" inputmode="numeric" autocomplete="one-time-code" />
+        </div>
+      </div>
+      <p id="loginNote" class="note" hidden></p>
       <p id="loginError" class="error" hidden></p>
       <button type="submit" id="loginSubmit" class="submit" disabled>Sign in</button>
     </form>
@@ -148,14 +178,25 @@ input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
   const faceMsg = document.getElementById("loginFaceMsg");
   const faceRole = document.getElementById("loginFaceRole");
   const faceName = document.getElementById("loginFaceName");
+  const fallbackBox = document.getElementById("fallbackBox");
+  const codeBox = document.getElementById("codeBox");
+  const emailBox = document.getElementById("emailBox");
+  const fallbackInput = document.getElementById("loginFallback");
+  const emailAddress = document.getElementById("loginEmail");
+  const emailInput = document.getElementById("loginEmailCode");
+  const sendEmail = document.getElementById("sendEmail");
+  const note = document.getElementById("loginNote");
   const VISION = "http://127.0.0.1:8002";
   let faceGranted = false;
   let passwordOk = false;
+  let cameraDown = false;
+  let fallbackOk = false;
   let checkTimer = null;
   let roster = [];
 
   function refreshSubmit() {
-    submit.disabled = !(faceGranted && passwordOk);
+    const secondFactor = faceGranted || (cameraDown && fallbackOk);
+    submit.disabled = !(passwordOk && secondFactor);
   }
   function setFace(granted, name, role) {
     faceGranted = granted;
@@ -216,8 +257,91 @@ input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
     }
     refreshSubmit();
   }
+  function fallbackMethod() {
+    const selected = document.querySelector('input[name="fallbackMode"]:checked');
+    return selected ? selected.value : "code";
+  }
+  function showFallbackMode() {
+    const email = fallbackMethod() === "email";
+    codeBox.hidden = email;
+    emailBox.hidden = !email;
+    fallbackOk = false;
+    note.hidden = true;
+    error.hidden = true;
+    refreshSubmit();
+  }
+  async function checkFallback() {
+    if (!cameraDown) {
+      fallbackOk = false;
+      refreshSubmit();
+      return;
+    }
+    const method = fallbackMethod();
+    const code = method === "email" ? emailInput.value : fallbackInput.value;
+    if (!passwordOk || !code) {
+      fallbackOk = false;
+      refreshSubmit();
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/auth/mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: userInput.value.trim(),
+          password: passInput.value,
+          method,
+          code
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      fallbackOk = res.ok && !!data.ok;
+      error.hidden = fallbackOk;
+      if (fallbackOk) note.hidden = true;
+      if (!fallbackOk) error.textContent = data.error || "Wrong code";
+    } catch (err) {
+      fallbackOk = false;
+      error.hidden = false;
+      error.textContent = "Cannot reach the dashboard server.";
+    }
+    refreshSubmit();
+  }
+  async function requestEmailCode() {
+    note.hidden = true;
+    error.hidden = true;
+    if (!passwordOk) {
+      error.hidden = false;
+      error.textContent = "Enter the username and password first.";
+      return;
+    }
+    sendEmail.disabled = true;
+    try {
+      const res = await fetch("/api/v1/auth/mfa/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: userInput.value.trim(),
+          password: passInput.value,
+          email: emailAddress.value.trim()
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        note.hidden = false;
+        note.textContent = "Code sent. Check your email, then type it here.";
+      } else {
+        error.hidden = false;
+        error.textContent = data.error || "Could not send the email code.";
+      }
+    } catch (err) {
+      error.hidden = false;
+      error.textContent = "Cannot reach the dashboard server.";
+    }
+    sendEmail.disabled = false;
+  }
   function scheduleCheck() {
     passwordOk = false;
+    fallbackOk = false;
     refreshSubmit();
     if (checkTimer) clearTimeout(checkTimer);
     checkTimer = setTimeout(checkPassword, 280);
@@ -236,20 +360,39 @@ input:focus{ outline:2px solid rgba(46,230,200,.45); border-color:transparent; }
         camEmpty.hidden = true;
         frame.src = VISION + "/frame.jpg?t=" + Date.now();
       }
+      cameraDown = false;
+      fallbackBox.hidden = true;
+      fallbackOk = false;
     } catch (err) {
       setFace(false, "", "");
       frame.hidden = true;
       camEmpty.hidden = false;
       camEmpty.textContent = "Camera waiting";
+      cameraDown = true;
+      fallbackBox.hidden = false;
     }
     setTimeout(pollCamera, 500);
   }
 
   userInput.addEventListener("input", scheduleCheck);
   passInput.addEventListener("input", scheduleCheck);
+  document.querySelectorAll('input[name="fallbackMode"]').forEach((input) => {
+    input.addEventListener("change", showFallbackMode);
+  });
+  sendEmail.addEventListener("click", requestEmailCode);
+  function watchCode(input) {
+    input.addEventListener("input", () => {
+      fallbackOk = false;
+      refreshSubmit();
+      if (checkTimer) clearTimeout(checkTimer);
+      checkTimer = setTimeout(checkFallback, 280);
+    });
+  }
+  watchCode(fallbackInput);
+  watchCode(emailInput);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!faceGranted || !passwordOk) return;
+    if (!(faceGranted || (cameraDown && fallbackOk)) || !passwordOk) return;
     sessionStorage.setItem("dc-login-user", userInput.value.trim());
     location.href = "/";
   });

@@ -6,10 +6,12 @@ import unittest
 
 from access.audit import entries, record
 from access.auth import authenticate, role_for_name
+from access.email_mfa import MARIAM_EMAIL, issue_email_code, verify_email_code
+from chatbot_server import answer_from_facts
 from access.control_gate import authorize_control
 from evidence.envelope import accept
-from evidence.hub import EventHub
-from evidence.query import ids_evidence
+from evidence.hub import HUB, EventHub
+from intelligence.ids import clear, findings, install, module_a, module_c
 
 
 class BoundaryTests(unittest.TestCase):
@@ -60,10 +62,106 @@ class BoundaryTests(unittest.TestCase):
         self.assertEqual(accept(complete)["status"], "accepted")
         self.assertEqual(accept(complete)["code"], "DUPLICATE_EVENT")
 
-    def test_ids_query_returns_no_invented_detections(self) -> None:
-        result = ids_evidence()
-        self.assertEqual(result["code"], "DEPENDENCY_UNAVAILABLE")
-        self.assertEqual(result["records"], [])
+    def test_intake_follows_the_configured_broker(self) -> None:
+        from evidence.envelope import configure_hub, get_hub
+
+        other = EventHub()
+        previous = get_hub()
+        configure_hub(other)
+        try:
+            routed = {
+                "eventId": "routed-1",
+                "sourceId": "ITSystemDataset",
+                "assetId": "server-3",
+                "eventType": "process.reading",
+                "observedAt": "2026-11-23T00:00:00+00:00",
+                "receivedAt": "2026-11-23T00:00:00+00:00",
+                "qualityStatus": "replayed",
+                "payload": {"cpuPercent": 5},
+                "evidenceRef": "routed-1",
+            }
+            self.assertEqual(accept(routed)["status"], "accepted")
+            self.assertEqual(other.records()[-1]["eventId"], "routed-1")
+        finally:
+            configure_hub(previous)
+
+    def test_ids_records_a_detection_and_ignores_a_normal_reading(self) -> None:
+        clear()
+        install(HUB)
+        normal = {
+            "eventId": "net-normal-1",
+            "eventType": "network.observation",
+            "payload": {"latencyMs": 4, "networkMbps": 10},
+            "evidenceRef": "net-normal-1",
+        }
+        self.assertIsNone(module_a(normal))
+        self.assertIsNone(module_c({"eventType": "process.reading", "payload": {"cpuPercent": 10, "tempC": 40}}))
+        high = {
+            "eventId": "net-high-1",
+            "sourceId": "ITSystemDataset",
+            "assetId": "server-1",
+            "eventType": "network.observation",
+            "observedAt": "2026-11-23T00:00:00+00:00",
+            "receivedAt": "2026-11-23T00:00:00+00:00",
+            "qualityStatus": "replayed",
+            "payload": {"latencyMs": 80, "networkMbps": 12},
+            "evidenceRef": "net-high-1",
+        }
+        self.assertEqual(accept(high)["status"], "accepted")
+        recorded = findings()["records"]
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0]["moduleId"], "A")
+        self.assertEqual(recorded[0]["evidenceRef"], "net-high-1")
+
+    def test_email_code_works_once_and_is_not_returned(self) -> None:
+        seen: dict[str, str] = {}
+
+        def capture(code: str, recipient: str) -> None:
+            seen["code"] = code
+            seen["recipient"] = recipient
+
+        issued = issue_email_code("mariamsalem", "mariam1234", sender=capture)
+        self.assertTrue(issued["ok"])
+        self.assertEqual(seen["recipient"], MARIAM_EMAIL)
+        self.assertNotIn(seen["code"], issued.values())
+        typed = issue_email_code("mariamsalem", "mariam1234", "other@example.com", sender=capture)
+        self.assertTrue(typed["ok"])
+        self.assertEqual(seen["recipient"], "other@example.com")
+        self.assertFalse(verify_email_code("mariamsalem", "mariam1234", "face-fallback")["ok"])
+        accepted = verify_email_code("mariamsalem", "mariam1234", seen["code"])
+        self.assertTrue(accepted["ok"])
+        self.assertEqual(accepted["factor"], "password+email")
+        self.assertFalse(verify_email_code("mariamsalem", "mariam1234", seen["code"])["ok"])
+
+    def test_recommendation_question_uses_the_analytics_tab_records(self) -> None:
+        facts = [
+            {
+                "section": "risk",
+                "text": "Severe risk summary: business risk is High with score 45. 7 critical recommendations and 4 high recommendations.",
+            },
+            {
+                "section": "recommendation",
+                "text": "AI recommendation high for Server 2: Server 2 has low CPU headroom. Evidence: CPU is 53.2%. Action: Review workload growth.",
+            },
+        ]
+        reply = answer_from_facts("what is your recommendations?", facts)
+        self.assertIn("Action: Review workload growth", reply)
+        self.assertNotIn("Severe risk summary", reply)
+
+    def test_active_alarm_question_returns_only_active_alarms(self) -> None:
+        facts = [
+            {"section": "server", "text": "Server 1 is ONLINE. CPU 77.6%, RAM 60.5%. Alarms: CPU, temperature, and down tag flags are clear."},
+            {"section": "alarms", "text": "Alarm history has 5 events and 2 active."},
+            {"section": "alarms", "text": "Active alarm on Server 1 at 2026-08-10: Server 1 taken offline. Severity CRITICAL."},
+            {"section": "alarms", "text": "Cleared alarm on Server 4 at 2026-08-09: temperature recovered. Severity WARNING."},
+            {"section": "metric", "text": "Server 1 CPU is 77.6%."},
+        ]
+        reply = answer_from_facts("give me only active alarms", facts)
+        self.assertIn("Active alarm on Server 1", reply)
+        self.assertIn("2 active", reply)
+        self.assertNotIn("tag flags are clear", reply)
+        self.assertNotIn("Cleared alarm", reply)
+        self.assertNotIn("CPU is 77.6%", reply)
 
     def test_audit_records_the_action_and_not_a_secret(self) -> None:
         item = record("mariamsalem", "sign-in", "denied")

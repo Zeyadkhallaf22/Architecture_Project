@@ -8,6 +8,7 @@ from pathlib import Path
 
 LOGIN_USERNAME = "mariamsalem"
 LOGIN_PASSWORD = "mariam1234"
+FALLBACK_CODE = "face-fallback"
 ROSTER_PATH = Path(__file__).resolve().parents[1] / "Grad_role.csv"
 
 
@@ -38,3 +39,13 @@ def authenticate(username: str, password: str) -> dict[str, object]:
     if not _same_secret(name, LOGIN_USERNAME) or not _same_secret(password, LOGIN_PASSWORD):
         return {"ok": False, "error": "Wrong username or password"}
     return {"ok": True, "username": LOGIN_USERNAME, "role": role_for_name("Mariam Salem") or "Admin"}
+
+
+def authenticate_fallback(username: str, password: str, code: str) -> dict[str, object]:
+    """Password plus the fallback code. Used only when the face camera is unavailable."""
+    result = authenticate(username, password)
+    if not result.get("ok"):
+        return result
+    if not _same_secret(code.strip(), FALLBACK_CODE):
+        return {"ok": False, "error": "Wrong fallback code"}
+    return {**result, "factor": "password+code"}
